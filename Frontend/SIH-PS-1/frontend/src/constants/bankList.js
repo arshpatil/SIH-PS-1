@@ -1,0 +1,15 @@
+export const SCHEDULED_BANKS = [
+  'State Bank of India',
+  'Punjab National Bank',
+  'Bank of Baroda',
+  'Canara Bank',
+  'Union Bank of India',
+  'HDFC Bank Ltd',
+  'ICICI Bank Ltd',
+  'Axis Bank Ltd',
+  'Indian Bank',
+  'Central Bank of India',
+  'Bank of India',
+  'Kotak Mahindra Bank',
+  'IndusInd Bank',
+]

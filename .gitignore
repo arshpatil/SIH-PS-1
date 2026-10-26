@@ -1,0 +1,38 @@
+# ==============================================================================
+# AICTE Security Deposit / FDR Management Portal - Root .gitignore
+# ==============================================================================
+
+# Python / Backend
+Backend/.venv/
+Backend/venv/
+Backend/__pycache__/
+Backend/*/__pycache__/
+Backend/*/*/__pycache__/
+Backend/*.py[cod]
+Backend/.pytest_cache/
+Backend/instance/*.db
+Backend/instance/*.sqlite
+Backend/instance/test_uploads/
+Backend/uploads/*
+!Backend/uploads/.gitkeep
+!Backend/uploads/request_documents/.gitkeep
+!Backend/uploads/fdr_documents/.gitkeep
+Backend/.env
+Backend/.env.local
+Backend/.env.*.local
+
+# Node.js / Frontend
+Frontend/SIH-PS-1/frontend/node_modules/
+Frontend/SIH-PS-1/frontend/dist/
+Frontend/SIH-PS-1/frontend/dist-ssr/
+Frontend/SIH-PS-1/frontend/*.log
+Frontend/SIH-PS-1/frontend/npm-debug.log*
+
+# General / OS / Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

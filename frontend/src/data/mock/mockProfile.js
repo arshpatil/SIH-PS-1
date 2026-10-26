@@ -1,0 +1,17 @@
+export const initialProfile = {
+  collegeName: 'ABC Institute of Engineering & Technology',
+  institutionId: 'AICTE-1-4392817291',
+  aictePermanentId: '1-4392817291',
+  approvalYear: '2026-2027',
+  adminName: 'Dr. K. S. Ramanathan',
+  designation: 'Director / Principal',
+  email: 'principal@abcite.edu.in',
+  contactNumber: '+91 98450 12345',
+  alternateEmail: 'registrar@abcite.edu.in',
+  address: 'Plot No. 12, Institutional Area, Knowledge Park II',
+  city: 'Greater Noida',
+  state: 'Uttar Pradesh',
+  pincode: '201310',
+  jointAccountDetails: 'Joint Account with Regional Officer, AICTE Northern Region',
+  lastUpdated: '2026-10-18T10:30:00Z',
+}

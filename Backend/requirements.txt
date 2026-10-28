@@ -1,0 +1,10 @@
+Flask>=3.1.0
+Flask-SQLAlchemy>=3.1.1
+SQLAlchemy>=2.0.36
+python-dotenv>=1.0.1
+flask-cors>=6.0.0
+pytest>=9.1.1
+pymupdf>=1.24.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+apscheduler>=3.10.0

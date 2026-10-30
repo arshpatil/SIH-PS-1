@@ -357,7 +357,8 @@ def test_notification_creation_and_cascade(app):
     # Mark as read
     notif.is_read = True
     db.session.commit()
-    assert db.session.get(Notification, notif.id).is_read is True
+    saved_notif = db.session.get(Notification, notif.id)
+    assert saved_notif is not None and saved_notif.is_read is True
 
     # Cascade deletion test
     notif_id = notif.id

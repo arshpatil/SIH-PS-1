@@ -24,6 +24,48 @@ export const dashboardService = {
     const response = await apiClient.get('/dashboard/charts', { params })
     return response.data?.data || response.data
   },
+
+  /**
+   * Fetch bureau officer workload, overdue cases, and escalation queues.
+   */
+  async getWorkload() {
+    const response = await apiClient.get('/dashboard/workload')
+    return response.data?.data || response.data
+  },
+
+  /**
+   * Fetch dedicated Admin Dashboard system-wide metrics, unassigned queue, and workloads.
+   */
+  async getAdminDashboard() {
+    const response = await apiClient.get('/dashboard/admin')
+    return response.data?.data || response.data
+  },
+
+  /**
+   * Fetch dedicated Officer Dashboard personal workload and assigned cases.
+   */
+  async getOfficerDashboard() {
+    const response = await apiClient.get('/dashboard/officer')
+    return response.data?.data || response.data
+  },
+
+  /**
+   * Fetch all officers for administrative oversight and assignment.
+   */
+  async getAdminOfficers() {
+    const response = await apiClient.get('/dashboard/officers')
+    return response.data?.data || response.data
+  },
+
+  /**
+   * Activate or deactivate an officer account (Admin only).
+   */
+  async updateOfficerStatus(officerId, isActive) {
+    const response = await apiClient.patch(`/dashboard/officers/${officerId}/status`, {
+      is_active: isActive,
+    })
+    return response.data?.data || response.data
+  },
 }
 
 export default dashboardService

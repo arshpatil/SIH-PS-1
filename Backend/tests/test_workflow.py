@@ -480,6 +480,7 @@ def test_cross_tenant_isolation_on_transition(seed_workflow_env):
 
     # Status must remain DRAFT
     refreshed = db.session.get(FDRRecord, fdr_a.id)
+    assert refreshed is not None
     assert refreshed.scrutiny_status == ScrutinyStatus.DRAFT.value
 
     # Institution B user must have received zero notifications
@@ -508,6 +509,7 @@ def test_transaction_rollback_on_failure(seed_workflow_env, monkeypatch):
     # Status in database must remain DRAFT
     db.session.rollback()
     refreshed = db.session.get(FDRRecord, fdr.id)
+    assert refreshed is not None
     assert refreshed.scrutiny_status == ScrutinyStatus.DRAFT.value
 
     # No audit log or notifications should exist for this failed attempt

@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from typing import Any
 from decimal import Decimal
 from sqlalchemy.orm import validates
 from app.extensions import db
@@ -78,6 +79,18 @@ class FDRRecord(db.Model):
         cascade="all, delete-orphan",
         order_by="FDRWorkflowHistory.created_at.asc()",
     )
+    renewal_history = db.relationship(
+        "FDRRenewalHistory",
+        back_populates="fdr",
+        cascade="all, delete-orphan",
+        order_by="FDRRenewalHistory.created_at.desc()",
+    )
+    bank_verifications = db.relationship(
+        "BankVerificationLog",
+        back_populates="fdr",
+        cascade="all, delete-orphan",
+        order_by="BankVerificationLog.created_at.desc()",
+    )
 
     @validates("amount")
     def validate_amount(self, key, value):
@@ -142,25 +155,57 @@ class FDRRecord(db.Model):
             )
         return val
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
     def to_dict(self) -> dict:
+        days_rem = None
+        if self.maturity_date:
+            mat_d = self.maturity_date.date() if isinstance(self.maturity_date, datetime) else self.maturity_date
+            days_rem = (mat_d - datetime.now(timezone.utc).date()).days
+
+        latest_req = None
+        try:
+            req_obj = self.requests.order_by(db.text("id DESC")).first()
+            if req_obj:
+                latest_req = req_obj.to_dict()
+        except Exception:
+            pass
+
         return {
             "id": self.id,
             "institution_id": self.institution_id,
             "institution_name": self.institution.name if self.institution else None,
             "fdr_number": self.fdr_number,
+            "fdrNumber": self.fdr_number,
             "bank_name": self.bank_name,
+            "bankName": self.bank_name,
             "branch_name": self.branch_name,
+            "branchName": self.branch_name,
             "amount": f"{self.amount:.2f}" if self.amount is not None else None,
+            "depositAmount": float(self.amount) if self.amount is not None else 0.0,
+            "deposit_amount": float(self.amount) if self.amount is not None else 0.0,
             "issue_date": self.issue_date.isoformat() if self.issue_date else None,
+            "issueDate": self.issue_date.isoformat() if self.issue_date else None,
             "maturity_date": (
+                self.maturity_date.isoformat() if self.maturity_date else None
+            ),
+            "maturityDate": (
                 self.maturity_date.isoformat() if self.maturity_date else None
             ),
             "scrutiny_status": self.scrutiny_status,
             "validity_status": self.validity_status,
+            "daysRemaining": days_rem,
+            "days_remaining": days_rem,
             "created_by": self.created_by,
             "creator_name": self.creator.full_name if self.creator else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "latest_request": latest_req,
+            "latestRequest": latest_req,
+            "renewal_history": [r.to_dict() for r in self.renewal_history] if self.renewal_history else [],
+            "latest_bank_verification": self.bank_verifications[0].to_dict() if self.bank_verifications else None,
+            "bank_verification_history": [v.to_dict() for v in self.bank_verifications[:5]] if self.bank_verifications else [],
         }
 
     def __repr__(self) -> str:

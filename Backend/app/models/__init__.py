@@ -13,6 +13,9 @@ from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.workflow_history import FDRWorkflowHistory
 from app.models.fdr_request import FDRRequest
+from app.models.renewal_history import FDRRenewalHistory
+from app.models.bank_verification import BankVerificationLog
+from app.models.email_log import EmailNotificationLog
 
 __all__ = [
     # Models
@@ -24,6 +27,9 @@ __all__ = [
     "Notification",
     "FDRWorkflowHistory",
     "FDRRequest",
+    "FDRRenewalHistory",
+    "BankVerificationLog",
+    "EmailNotificationLog",
     # Enums
     "ScrutinyStatus",
     "ValidityStatus",

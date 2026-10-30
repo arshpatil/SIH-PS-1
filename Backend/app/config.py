@@ -1,8 +1,11 @@
 from datetime import timedelta
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Preload .env from Backend directory so Config class attributes evaluate correctly
+load_dotenv(BASE_DIR / ".env")
 
 
 class Config:
@@ -52,15 +55,43 @@ class Config:
     OVERDUE_ACTION_DAYS = int(os.getenv("OVERDUE_ACTION_DAYS", 30))
     REMINDER_INTERVAL_DAYS = [
         int(x.strip())
-        for x in os.getenv("REMINDER_INTERVAL_DAYS", "30,15,7,0").split(",")
+        for x in os.getenv("REMINDER_INTERVAL_DAYS", "90,60,30,15,7,0").split(",")
         if x.strip()
     ]
-    SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "False").lower() in (
+    SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "True").lower() in (
         "true",
         "1",
         "t",
+        "yes",
     )
     BUSINESS_TIMEZONE = os.getenv("BUSINESS_TIMEZONE", "UTC")
+
+    # Bank Integration Layer Configuration (Defaults to Mock / Prototype Demo)
+    BANK_PROVIDER = os.getenv("BANK_PROVIDER", "mock").lower().strip()
+    BANK_TIMEOUT_SECONDS = int(os.getenv("BANK_TIMEOUT_SECONDS", 10))
+    BANK_API_URL = os.getenv("BANK_API_URL", "").strip()
+    BANK_CLIENT_ID = os.getenv("BANK_CLIENT_ID", "").strip()
+    BANK_CLIENT_SECRET = os.getenv("BANK_CLIENT_SECRET", "").strip()
+    BANK_CERT_PATH = os.getenv("BANK_CERT_PATH", "").strip()
+    BANK_ENVIRONMENT = os.getenv("BANK_ENVIRONMENT", "sandbox").lower().strip()
+
+    # SMTP Email Notification Configuration (Gmail SMTP or Custom Gateway)
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com").strip()
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True").lower() in ("true", "1", "t", "yes")
+    MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "False").lower() in ("true", "1", "t", "yes")
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME", "").strip()
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "").strip()
+    MAIL_DEFAULT_SENDER = os.getenv(
+        "MAIL_DEFAULT_SENDER",
+        os.getenv("MAIL_USERNAME") or "AICTE FDR Portal <noreply@aicte.gov.in>",
+    ).strip()
+    MAIL_SUPPRESS_SEND = os.getenv("MAIL_SUPPRESS_SEND", "False").lower() in (
+        "true",
+        "1",
+        "t",
+        "yes",
+    )
 
 
 class DevelopmentConfig(Config):
@@ -80,6 +111,8 @@ class TestingConfig(Config):
     TESTING = True
     DEBUG = True
     SESSION_COOKIE_SECURE = False
+    MAIL_SUPPRESS_SEND = True
+    SCHEDULER_ENABLED = False
     UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads"
     REQUEST_UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads" / "requests"
     SQLALCHEMY_DATABASE_URI = os.getenv(
@@ -99,7 +132,7 @@ class ProductionConfig(Config):
 
     @classmethod
     def validate(cls):
-        if not cls.SQLALCHEMY_DATABASE_URI:
+        if not cls.SQLALCHEMY_DATABASE_URI or cls.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
             raise ValueError(
                 "DATABASE_URL environment variable must be set in production mode."
             )

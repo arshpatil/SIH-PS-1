@@ -15,6 +15,7 @@ import {
   Upload,
   Send,
   Check,
+  Clock,
 } from 'lucide-react'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -25,11 +26,13 @@ import { formatCurrency, formatFileSize } from '../utils/formatters'
 import { formatDate, getDaysRemaining } from '../utils/dateUtils'
 import { useApp } from '../context/AppContext'
 import { fdrService } from '../services/fdrService'
+import { requestService } from '../services/requestService'
+import { BankVerificationCard } from '../components/fdr/BankVerificationCard'
 
 export function FDRDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, showToast, addRequest } = useApp()
+  const { currentUser, showToast, addRequest, submitRenewalDetails, verifyRenewal, requests } = useApp()
 
   const [fdr, setFdr] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,6 +44,9 @@ export function FDRDetailPage() {
   const [docDetail, setDocDetail] = useState(null)
   const [docLoading, setDocLoading] = useState(false)
   const [docModalOpen, setDocModalOpen] = useState(false)
+  const [docDecision, setDocDecision] = useState('')
+  const [docRemarks, setDocRemarks] = useState('')
+  const [docVerifying, setDocVerifying] = useState(false)
 
   // Document upload state
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
@@ -64,6 +70,30 @@ export function FDRDetailPage() {
   const [requestReason, setRequestReason] = useState('')
   const [requestSubmitting, setRequestSubmitting] = useState(false)
 
+  // Renewed FDR receipt upload modal (Institution)
+  const [renewalUploadModalOpen, setRenewalUploadModalOpen] = useState(false)
+  const [renewalForm, setRenewalForm] = useState({
+    newFdrNumber: '',
+    newIssueDate: '',
+    newMaturityDate: '',
+    newAmount: '',
+    remarks: '',
+  })
+  const [renewalFile, setRenewalFile] = useState(null)
+  const [renewalSubmitting, setRenewalSubmitting] = useState(false)
+
+  // Renewed FDR verification modal (Officer)
+  const [renewalVerifyModalOpen, setRenewalVerifyModalOpen] = useState(false)
+  const [renewalDecision, setRenewalDecision] = useState('VERIFIED')
+  const [renewalVerifyRemarks, setRenewalVerifyRemarks] = useState('')
+  const [renewalVerifying, setRenewalVerifying] = useState(false)
+  const [isSimulatedVerification, setIsSimulatedVerification] = useState(false)
+  const [downloadingDemoReceipt, setDownloadingDemoReceipt] = useState(false)
+  const isDevDemoMode = Boolean(
+    import.meta.env.DEV ||
+    typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  )
+
   const isOfficerOrAdmin =
     currentUser?.role === 'AICTE_OFFICER' ||
     currentUser?.role === 'ADMIN' ||
@@ -74,8 +104,8 @@ export function FDRDetailPage() {
   // Data Loaders
   // -------------------------------------------------------------
 
-  const loadFDRDetails = useCallback(async () => {
-    setLoading(true)
+  const loadFDRDetails = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
     try {
       const [fdrRes, docsRes, wfRes] = await Promise.allSettled([
         fdrService.getFDRById(id),
@@ -105,8 +135,47 @@ export function FDRDetailPage() {
   }, [id])
 
   useEffect(() => {
-    loadFDRDetails()
-  }, [loadFDRDetails])
+    let cancelled = false
+    const fetchDetails = async () => {
+      try {
+        const [fdrRes, docsRes, wfRes] = await Promise.allSettled([
+          fdrService.getFDRById(id),
+          fdrService.listDocuments(id),
+          fdrService.getWorkflow(id),
+        ])
+
+        if (cancelled) return
+
+        if (fdrRes.status === 'fulfilled' && fdrRes.value) {
+          setFdr(fdrRes.value)
+        } else {
+          // Fallback from route param
+          setFdr(null)
+        }
+
+        if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)) {
+          setDocuments(docsRes.value)
+        }
+
+        if (wfRes.status === 'fulfilled' && wfRes.value) {
+          setWorkflowData(wfRes.value)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('Error loading FDR details:', err)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchDetails()
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   // Open Document Detail & OCR Discrepancy Modal
   const handleOpenDocModal = async (doc) => {
@@ -124,6 +193,34 @@ export function FDRDetailPage() {
   }
 
   // Handle Document Download
+  // Handle Officer Document Verification Decision
+  const handleVerifyDocDecision = async (e) => {
+    e.preventDefault()
+    if (!docDecision) {
+      showToast('Please select a verification decision.', 'error')
+      return
+    }
+    if ((docDecision === 'REQUIRES_CORRECTION' || docDecision === 'REJECTED') && !docRemarks.trim()) {
+      showToast('Remarks are mandatory for deficiency or rejection.', 'error')
+      return
+    }
+    setDocVerifying(true)
+    try {
+      await fdrService.verifyDocumentDecision(fdr.id, selectedDoc.id, docDecision, docRemarks.trim())
+      showToast(`Document decision recorded: ${docDecision}`, 'success')
+      setDocRemarks('')
+      setDocDecision('')
+      // Refresh documents
+      const docs = await fdrService.listFDRDocuments(fdr.id)
+      setDocuments(docs)
+      setDocModalOpen(false)
+    } catch (err) {
+      showToast(err.message || 'Failed to record document decision.', 'error')
+    } finally {
+      setDocVerifying(false)
+    }
+  }
+
   const handleDownloadDoc = async (doc) => {
     try {
       showToast(`Downloading ${doc.original_filename || 'document.pdf'}...`, 'info')
@@ -270,24 +367,140 @@ export function FDRDetailPage() {
     setRequestModalOpen(true)
   }
 
-  const handleSubmitRequest = (e) => {
+  const handleSubmitRequest = async (e) => {
     e.preventDefault()
-    if (!requestReason.trim()) return
+    if (!requestReason.trim()) {
+      showToast('Please provide a justification for this petition.', 'error')
+      return
+    }
     setRequestSubmitting(true)
-    setTimeout(() => {
-      addRequest({
+    try {
+      await addRequest({
         fdrId: fdr.id,
         fdrNumber: fdr.fdrNumber,
         bankName: fdr.bankName,
         depositAmount: fdr.depositAmount,
         requestType,
-        reason: requestReason,
+        reason: requestReason.trim(),
         supportingDocument: `${fdr.fdrNumber}_${requestType}_Application.pdf`,
       })
-      setRequestSubmitting(false)
       setRequestModalOpen(false)
-      showToast(`${requestType} petition submitted for ${fdr.fdrNumber}`, 'success')
-    }, 400)
+      setRequestReason('')
+    } catch {
+      // Toast error is already handled and displayed inside addRequest
+    } finally {
+      setRequestSubmitting(false)
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Renewal Workflow Handlers
+  // -------------------------------------------------------------
+
+  const handleOpenRenewalUploadModal = (requestObj) => {
+    setRenewalForm({
+      newFdrNumber: requestObj?.renewalFdrNumber || requestObj?.renewal_fdr_number || fdr?.fdrNumber || '',
+      newIssueDate: requestObj?.renewalIssueDate || requestObj?.renewal_issue_date || new Date().toISOString().split('T')[0],
+      newMaturityDate: requestObj?.renewalMaturityDate || requestObj?.renewal_maturity_date || '',
+      newAmount: requestObj?.renewalAmount || requestObj?.renewal_amount || fdr?.depositAmount || '',
+      remarks: requestObj?.renewalRemarks || requestObj?.renewal_remarks || '',
+    })
+    setRenewalFile(null)
+    setRenewalUploadModalOpen(true)
+  }
+
+  const handleSubmitRenewalForm = async (e) => {
+    e.preventDefault()
+    if (!renewalForm.newFdrNumber.trim()) {
+      showToast('Please enter the renewed FDR number.', 'warning')
+      return
+    }
+    if (!renewalForm.newIssueDate || !renewalForm.newMaturityDate) {
+      showToast('Issue date and maturity date are required.', 'warning')
+      return
+    }
+    if (renewalForm.newMaturityDate <= renewalForm.newIssueDate) {
+      showToast('Maturity date must be later than the issue date.', 'warning')
+      return
+    }
+    if (!renewalFile && !linkedRequest?.renewalDocument && !linkedRequest?.renewal_document) {
+      showToast('Please upload the renewed bank FDR receipt.', 'warning')
+      return
+    }
+
+    setRenewalSubmitting(true)
+    try {
+      await submitRenewalDetails(linkedRequest.id || linkedRequest.raw_id, {
+        newFdrNumber: renewalForm.newFdrNumber.trim(),
+        newIssueDate: renewalForm.newIssueDate,
+        newMaturityDate: renewalForm.newMaturityDate,
+        newAmount: renewalForm.newAmount,
+        remarks: renewalForm.remarks,
+        file: renewalFile,
+      })
+      setRenewalUploadModalOpen(false)
+      await loadFDRDetails()
+    } catch {
+      // Toast handled inside submitRenewalDetails
+    } finally {
+      setRenewalSubmitting(false)
+    }
+  }
+
+  const handleOpenRenewalVerifyModal = () => {
+    const isSynthetic = Boolean(linkedRequest?.renewalIsSynthetic || linkedRequest?.renewal_is_synthetic)
+    setIsSimulatedVerification(isSynthetic)
+    setRenewalDecision('VERIFIED')
+    setRenewalVerifyRemarks(
+      isSynthetic
+        ? 'Verified in simulated demonstration mode. Document was synthetic test receipt.'
+        : 'All terms and renewed deposit endorsement clauses verified successfully.'
+    )
+    setRenewalVerifyModalOpen(true)
+  }
+
+  const handleExecuteRenewalVerify = async (e) => {
+    e.preventDefault()
+    if ((renewalDecision === 'RETURNED' || renewalDecision === 'REJECTED') && (!renewalVerifyRemarks || renewalVerifyRemarks.trim().length < 5)) {
+      showToast('Please provide mandatory remarks (at least 5 characters) for this decision.', 'warning')
+      return
+    }
+
+    setRenewalVerifying(true)
+    try {
+      await verifyRenewal(linkedRequest.id || linkedRequest.raw_id, {
+        decision: renewalDecision,
+        remarks: renewalVerifyRemarks.trim(),
+        is_simulated: isSimulatedVerification,
+      })
+      setRenewalVerifyModalOpen(false)
+      await loadFDRDetails()
+    } catch {
+      // Toast handled in verifyRenewal
+    } finally {
+      setRenewalVerifying(false)
+    }
+  }
+
+  const handleDownloadDemoReceipt = async () => {
+    if (!fdr?.id) return
+    setDownloadingDemoReceipt(true)
+    try {
+      await requestService.downloadSyntheticReceipt(fdr.id, `DEMO_Renewal_Receipt_${fdr.fdrNumber}.pdf`)
+      showToast('Synthetic demo receipt downloaded. You can now upload it for testing!', 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to download demo receipt', 'error')
+    } finally {
+      setDownloadingDemoReceipt(false)
+    }
+  }
+
+  const handleDownloadRenewalReceipt = async (reqId, filename) => {
+    try {
+      await requestService.downloadAttachment(reqId, filename || 'renewed_fdr_receipt.pdf')
+    } catch (err) {
+      showToast('Failed to download renewal receipt: ' + (err.message || 'File not found'), 'error')
+    }
   }
 
   if (loading) {
@@ -311,6 +524,29 @@ export function FDRDetailPage() {
       </div>
     )
   }
+
+  const linkedRequest =
+    fdr?.latestRequest ||
+    fdr?.latest_request ||
+    requests?.find((r) => String(r.fdrId || r.fdr_id) === String(fdr?.id))
+
+  const isRenewalActive =
+    linkedRequest &&
+    (linkedRequest.requestType === 'Renewal' || linkedRequest.request_type === 'Renewal') &&
+    ['Submitted', 'Under Review', 'Approved', 'Pending Verification', 'Documents Required'].includes(linkedRequest.status)
+
+  const isRenewalApprovedAwaitingReceipt =
+    linkedRequest &&
+    (linkedRequest.requestType === 'Renewal' || linkedRequest.request_type === 'Renewal') &&
+    linkedRequest.status === 'Approved' &&
+    !linkedRequest.renewalSubmittedAt &&
+    !linkedRequest.renewal_submitted_at
+
+  const isRenewalPendingVerification =
+    linkedRequest &&
+    (linkedRequest.requestType === 'Renewal' || linkedRequest.request_type === 'Renewal') &&
+    (linkedRequest.status === 'Pending Verification' || Boolean(linkedRequest.renewalSubmittedAt || linkedRequest.renewal_submitted_at)) &&
+    linkedRequest.status !== 'Closed'
 
   const daysLeft = getDaysRemaining(fdr.maturityDate)
   const isMaturityNear =
@@ -341,6 +577,36 @@ export function FDRDetailPage() {
                 {fdr.fdrNumber}
               </h2>
               <FDRStatusBadge status={fdr.scrutiny_status || fdr.status} />
+              {daysLeft < -30 && (
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                  Overdue Action (&gt;30d past maturity)
+                </span>
+              )}
+              {daysLeft >= -30 && daysLeft < 0 && (
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  Matured (In Grace Period)
+                </span>
+              )}
+              {daysLeft >= 0 && daysLeft <= 7 && (
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-900 border border-orange-300 animate-pulse">
+                  Critical ({daysLeft}d left)
+                </span>
+              )}
+              {daysLeft > 7 && daysLeft <= 30 && (
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                  Expiring in {daysLeft}d
+                </span>
+              )}
+              {daysLeft > 30 && daysLeft <= 60 && (
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+                  Expiring in {daysLeft}d
+                </span>
+              )}
+              {daysLeft > 60 && daysLeft <= 90 && (
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-100 text-cyan-800">
+                  Expiring in {daysLeft}d
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               {fdr.institution_name ? `${fdr.institution_name} • ` : ''}Issued by {fdr.bankName} • AICTE Joint Lien Deposit
@@ -427,17 +693,29 @@ export function FDRDetailPage() {
             </Button>
           )}
 
-          {/* Legacy Petition Actions if verified */}
+          {/* Institutional Actions: Renewal / Release */}
           {!isOfficerOrAdmin && fdr.scrutiny_status === 'VERIFIED' && (
             <>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={RefreshCw}
-                onClick={() => handleOpenRequest('Renewal')}
-              >
-                Petition Renewal
-              </Button>
+              {!isRenewalActive ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={RefreshCw}
+                  onClick={() => handleOpenRequest('Renewal')}
+                >
+                  Petition Renewal
+                </Button>
+              ) : isRenewalApprovedAwaitingReceipt ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={Upload}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-xs"
+                  onClick={() => handleOpenRenewalUploadModal(linkedRequest)}
+                >
+                  Upload Renewed Receipt
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
@@ -448,8 +726,133 @@ export function FDRDetailPage() {
               </Button>
             </>
           )}
+
+          {/* AICTE Officer: Verify Pending Renewal Receipt */}
+          {isOfficerOrAdmin && isRenewalPendingVerification && (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={CheckCircle2}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-xs"
+              onClick={handleOpenRenewalVerifyModal}
+            >
+              Verify Renewed Deposit
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Active Renewal Petition Status Card */}
+      {linkedRequest && (linkedRequest.requestType === 'Renewal' || linkedRequest.request_type === 'Renewal') && (
+        <div
+          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs ${
+            isRenewalApprovedAwaitingReceipt
+              ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+              : isRenewalPendingVerification
+              ? 'bg-purple-50/90 border-purple-300 text-purple-950'
+              : linkedRequest.status === 'Closed'
+              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+              : 'bg-blue-50/90 border-blue-300 text-blue-950'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            {isRenewalApprovedAwaitingReceipt ? (
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            ) : isRenewalPendingVerification ? (
+              <Clock className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+            ) : linkedRequest.status === 'Closed' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <FileText className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            )}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-sm">Renewal Petition {linkedRequest.id}:</span>
+                <span className="font-semibold px-2 py-0.5 rounded text-xs bg-white/80 border border-current">
+                  {linkedRequest.status}
+                </span>
+                <span className="text-xs text-slate-500 font-mono">
+                  Stage: {linkedRequest.stage}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed">
+                {isRenewalApprovedAwaitingReceipt ? (
+                  <>
+                    <strong className="text-amber-900">Renewal request approved — updated FDR receipt required.</strong>{' '}
+                    AICTE Scrutiny Desk has approved this renewal petition. The bank renewed receipt must be submitted and verified before the official maturity date is extended.
+                  </>
+                ) : isRenewalPendingVerification ? (
+                  <>
+                    <strong className="text-purple-900">Renewed receipt awaiting verification.</strong>{' '}
+                    Renewed details submitted on {formatDate(linkedRequest.renewalSubmittedAt || linkedRequest.renewal_submitted_at)} with proposed new maturity date {formatDate(linkedRequest.renewalMaturityDate || linkedRequest.renewal_maturity_date)}. AICTE officer verification is in progress.
+                  </>
+                ) : linkedRequest.status === 'Closed' ? (
+                  <>
+                    <strong className="text-emerald-900">Renewal verified — next maturity: {formatDate(fdr.maturityDate)}.</strong>{' '}
+                    The deposit terms have been officially verified and renewed in the AICTE statutory repository.
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-blue-900">Renewal request under review.</strong>{' '}
+                    AICTE Regional Desk is currently evaluating this statutory petition. The original maturity date remains active until endorsed.
+                  </>
+                )}
+              </p>
+              {linkedRequest.remarks && (
+                <p className="text-xs text-slate-600 italic">
+                  Officer Remarks: {linkedRequest.remarks}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {!isOfficerOrAdmin && (isRenewalApprovedAwaitingReceipt || linkedRequest.status === 'Documents Required') && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                onClick={() => handleOpenRenewalUploadModal(linkedRequest)}
+              >
+                Upload Renewed Receipt
+              </Button>
+            )}
+            {isOfficerOrAdmin && isRenewalPendingVerification && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+                onClick={handleOpenRenewalVerifyModal}
+              >
+                Verify Renewal
+              </Button>
+            )}
+            {(linkedRequest.renewalDocument || linkedRequest.renewal_document) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                onClick={() => handleDownloadRenewalReceipt(linkedRequest.id || linkedRequest.raw_id, linkedRequest.renewalDocument || linkedRequest.renewal_document)}
+              >
+                Download Receipt
+              </Button>
+            )}
+            {isDevDemoMode && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                loading={downloadingDemoReceipt}
+                className="border-dashed border-amber-400 bg-amber-50/70 text-amber-900 hover:bg-amber-100 font-medium"
+                onClick={handleDownloadDemoReceipt}
+                title="Download synthetic test receipt for local demonstration (Dev/Demo mode only)"
+              >
+                Download Dummy PDF (Demo)
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Active Deficiency Alert Banner */}
       {deficienciesList.length > 0 && (
@@ -479,9 +882,14 @@ export function FDRDetailPage() {
             <div>
               <span className="font-bold">Maturity Alert:</span> This FDR reaches term on{' '}
               <strong>{formatDate(fdr.maturityDate)}</strong> ({daysLeft} days remaining).
+              {isRenewalActive && (
+                <span className="block text-2xs text-amber-800 mt-0.5">
+                  Notice: A statutory renewal petition is in progress ({linkedRequest?.status}). Original maturity date remains effective until verified.
+                </span>
+              )}
             </div>
           </div>
-          {!isOfficerOrAdmin && (
+          {!isOfficerOrAdmin && !isRenewalActive && (
             <Button
               variant="primary"
               size="sm"
@@ -493,6 +901,12 @@ export function FDRDetailPage() {
           )}
         </div>
       )}
+
+      {/* Core Banking Integration & Simulated Verification Card */}
+      <BankVerificationCard
+        fdr={fdr}
+        onVerified={() => loadFDRDetails()}
+      />
 
       {/* 2-Column Info Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -574,6 +988,65 @@ export function FDRDetailPage() {
               </div>
             )}
           </Card>
+
+          {/* Verified Term Extensions & Renewal History */}
+          {((fdr.renewal_history && fdr.renewal_history.length > 0) || (fdr.renewalHistory && fdr.renewalHistory.length > 0)) && (
+            <Card>
+              <CardHeader
+                title="Verified Term Extensions & Renewal History"
+                subtitle="Immutable statutory record of all previous and verified renewals"
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                      <th className="py-2.5 px-3">Verification Date</th>
+                      <th className="py-2.5 px-3">Previous Maturity</th>
+                      <th className="py-2.5 px-3">Verified New Term</th>
+                      <th className="py-2.5 px-3">Renewed Deposit</th>
+                      <th className="py-2.5 px-3">Verified By</th>
+                      <th className="py-2.5 px-3 text-right">Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(fdr.renewal_history || fdr.renewalHistory || []).map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-600 font-mono">
+                          {formatDate(item.created_at)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 line-through">
+                          {formatDate(item.previous_maturity_date)}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-emerald-700">
+                          {formatDate(item.new_maturity_date)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-medium text-slate-900">
+                          {formatCurrency(item.new_amount)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          {item.verifier_name || 'AICTE Officer'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {item.renewal_document ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadRenewalReceipt(item.request_id, item.renewal_document)}
+                              className="inline-flex items-center gap-1 text-xs text-[#142B4A] hover:underline font-medium"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Receipt</span>
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">N/A</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           {/* Structured Scrutiny & Workflow History */}
           <Card>
@@ -808,6 +1281,56 @@ export function FDRDetailPage() {
               <p className="text-slate-500 py-4 text-center">No OCR discrepancy analysis found for this file.</p>
             )}
 
+            {/* Officer Document Verification Action */}
+            {isOfficerOrAdmin && selectedDoc && (
+              <form onSubmit={handleVerifyDocDecision} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 my-3">
+                <div className="flex items-center gap-2 font-bold text-slate-800">
+                  <ShieldCheck className="w-4 h-4 text-[#142B4A]" />
+                  <span>Official Document Scrutiny Decision</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                      Verification Decision <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={docDecision}
+                      onChange={(e) => setDocDecision(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white"
+                    >
+                      <option value="">Choose Officer Finding...</option>
+                      <option value="VERIFIED">VERIFIED (Matches Standard APH Rules)</option>
+                      <option value="REQUIRES_CORRECTION">REQUIRES_CORRECTION (Deficiency)</option>
+                      <option value="REJECTED">REJECTED (Fraud / Ineligible)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                      Scrutiny Notes {(docDecision === 'REQUIRES_CORRECTION' || docDecision === 'REJECTED') ? <span className="text-rose-500">*</span> : ''}
+                    </label>
+                    <input
+                      type="text"
+                      value={docRemarks}
+                      onChange={(e) => setDocRemarks(e.target.value)}
+                      placeholder="e.g. Bank seal illegible, re-upload scan..."
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    disabled={!docDecision}
+                    loading={docVerifying}
+                  >
+                    Record Decision
+                  </Button>
+                </div>
+              </form>
+            )}
+
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <Button variant="secondary" size="sm" onClick={() => setDocModalOpen(false)}>
                 Close
@@ -965,6 +1488,281 @@ export function FDRDetailPage() {
             </Button>
             <Button type="submit" variant="primary" size="md" loading={requestSubmitting}>
               Submit {requestType} Request
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Upload Renewed FDR Receipt Modal (Institution) */}
+      <Modal
+        isOpen={renewalUploadModalOpen}
+        onClose={() => setRenewalUploadModalOpen(false)}
+        title="Upload Renewed FDR Deposit Receipt"
+        subtitle={`FDR Ref: ${fdr.fdrNumber} • Petition ${linkedRequest?.id || ''}`}
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleSubmitRenewalForm} className="space-y-4 text-xs">
+          <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 leading-relaxed">
+            <span className="font-semibold">Regulatory Notice:</span> Please enter the renewed certificate details endorsed by your commercial bank and attach the signed receipt document. The new maturity date will become active once verified by an AICTE officer.
+          </div>
+
+          {isDevDemoMode && (
+            <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white">Dev / Demo Mode</span>
+                  <span className="font-semibold text-xs text-indigo-900">Need a dummy receipt for testing?</span>
+                </div>
+                <p className="text-2xs text-indigo-700">Download a compliant synthetic PDF receipt generated from this FDR's parameters.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                icon={Download}
+                loading={downloadingDemoReceipt}
+                onClick={handleDownloadDemoReceipt}
+                className="border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-100 shrink-0 self-start sm:self-auto font-medium"
+              >
+                Download Dummy PDF
+              </Button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Renewed FDR Number <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={renewalForm.newFdrNumber}
+                onChange={(e) => setRenewalForm({ ...renewalForm, newFdrNumber: e.target.value })}
+                placeholder="e.g. FDR-2026-9901"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Renewed Deposit Amount (₹) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                required
+                value={renewalForm.newAmount}
+                onChange={(e) => setRenewalForm({ ...renewalForm, newAmount: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Renewed Issue Date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={renewalForm.newIssueDate}
+                onChange={(e) => setRenewalForm({ ...renewalForm, newIssueDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Verified New Maturity Date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={renewalForm.newMaturityDate}
+                onChange={(e) => setRenewalForm({ ...renewalForm, newMaturityDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Renewed FDR Receipt Scan (PDF / Image) <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              required={!linkedRequest?.renewalDocument && !linkedRequest?.renewal_document}
+              onChange={(e) => setRenewalFile(e.target.files?.[0] || null)}
+              className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#142B4A] file:text-white hover:file:bg-[#1a385f]"
+            />
+            {linkedRequest?.renewalDocument && !renewalFile && (
+              <p className="text-2xs text-slate-500 mt-1">
+                Previously uploaded: <span className="font-mono">{linkedRequest.renewalDocument}</span>. Leave empty to keep.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Bank Endorsement Remarks <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <textarea
+              rows={2}
+              value={renewalForm.remarks}
+              onChange={(e) => setRenewalForm({ ...renewalForm, remarks: e.target.value })}
+              placeholder="e.g. Renewed for 3-year term as per AICTE Lien Endorsement clause..."
+              className="w-full p-2.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={renewalSubmitting}
+              onClick={() => setRenewalUploadModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" loading={renewalSubmitting}>
+              Submit Renewed Receipt
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Verify Renewed FDR Details Modal (AICTE Officer) */}
+      <Modal
+        isOpen={renewalVerifyModalOpen}
+        onClose={() => setRenewalVerifyModalOpen(false)}
+        title="Verify & Endorse Renewed Deposit"
+        subtitle={`FDR Ref: ${fdr.fdrNumber} • Petition ${linkedRequest?.id || ''}`}
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleExecuteRenewalVerify} className="space-y-4 text-xs">
+          <div className="p-3 bg-purple-50 rounded-lg border border-purple-200 text-purple-950 space-y-2">
+            <span className="font-bold text-xs">Comparison of Deposit Parameters:</span>
+            <div className="grid grid-cols-2 gap-2 text-2xs font-mono">
+              <div className="p-2 rounded bg-white border border-purple-100">
+                <p className="text-slate-400 uppercase font-semibold">Previous Term</p>
+                <p className="font-bold text-slate-800">FDR #: {fdr.fdrNumber}</p>
+                <p className="text-slate-600">Maturity: {formatDate(fdr.maturityDate)}</p>
+                <p className="text-slate-600">Amount: {formatCurrency(fdr.depositAmount)}</p>
+              </div>
+              <div className="p-2 rounded bg-emerald-50 border border-emerald-200">
+                <p className="text-emerald-700 uppercase font-semibold">Proposed Term</p>
+                <p className="font-bold text-emerald-950">FDR #: {linkedRequest?.renewalFdrNumber || linkedRequest?.renewal_fdr_number || fdr.fdrNumber}</p>
+                <p className="text-emerald-900 font-bold">Maturity: {formatDate(linkedRequest?.renewalMaturityDate || linkedRequest?.renewal_maturity_date)}</p>
+                <p className="text-emerald-900">Amount: {formatCurrency(linkedRequest?.renewalAmount || linkedRequest?.renewal_amount || fdr.depositAmount)}</p>
+              </div>
+            </div>
+          </div>
+
+          {(linkedRequest?.renewalDocument || linkedRequest?.renewal_document) && (
+            <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-600" />
+                <span className="font-semibold text-slate-800 truncate max-w-[220px]">
+                  {linkedRequest?.renewalDocument || linkedRequest?.renewal_document}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDownloadRenewalReceipt(linkedRequest.id || linkedRequest.raw_id, linkedRequest.renewalDocument || linkedRequest.renewal_document)}
+                className="inline-flex items-center gap-1 text-xs text-[#142B4A] hover:underline font-semibold"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>View Receipt</span>
+              </button>
+            </div>
+          )}
+
+          {isDevDemoMode && (
+            <div className="p-3 rounded-lg border border-purple-200 bg-purple-50/70 space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isSimulatedVerification}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setIsSimulatedVerification(checked)
+                    if (checked && (!renewalVerifyRemarks || renewalVerifyRemarks.includes('verified successfully'))) {
+                      setRenewalVerifyRemarks('Verified in simulated demonstration mode. Document was synthetic test receipt.')
+                    }
+                  }}
+                  className="mt-0.5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-purple-950 flex items-center gap-1.5">
+                    <span>Simulated Demo Verification Path</span>
+                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-200 text-purple-900 uppercase">Dev Only</span>
+                  </span>
+                  <p className="text-2xs text-purple-800 mt-0.5 leading-normal">
+                    Visibly marks endorsement as a local simulated verification for synthetic test receipts without claiming authentic bank core endorsement.
+                  </p>
+                </div>
+              </label>
+
+              {(linkedRequest?.renewalIsSynthetic || linkedRequest?.renewal_is_synthetic) && (
+                <div className="p-2 rounded bg-amber-50 border border-amber-300 text-amber-900 text-2xs space-y-0.5">
+                  <p className="font-bold">⚠️ Synthetic Test Receipt Detected:</p>
+                  <p>Watermark "SYNTHETIC DEMO DOCUMENT — NOT ISSUED BY A BANK" was identified. Recommended: use Simulated Demo Verification above.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Official Scrutiny Decision <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={renewalDecision}
+              onChange={(e) => setRenewalDecision(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-xs"
+            >
+              <option value="VERIFIED">VERIFIED (Endorse & Extend Official Maturity Term)</option>
+              <option value="RETURNED">RETURNED (Deficiency Notice — Demand Corrected Receipt)</option>
+              <option value="REJECTED">REJECTED (Reject Extension & Lien Enforcement)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Officer Scrutiny Remarks {renewalDecision !== 'VERIFIED' ? <span className="text-rose-500">*</span> : <span className="text-slate-400 font-normal">(Optional)</span>}
+            </label>
+            <textarea
+              rows={3}
+              required={renewalDecision !== 'VERIFIED'}
+              value={renewalVerifyRemarks}
+              onChange={(e) => setRenewalVerifyRemarks(e.target.value)}
+              placeholder={
+                renewalDecision === 'VERIFIED'
+                  ? 'e.g. Joint lien verified, renewed terms approved.'
+                  : 'State reasons for deficiency or rejection...'
+              }
+              className="w-full p-2.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={renewalVerifying}
+              onClick={() => setRenewalVerifyModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant={renewalDecision === 'REJECTED' ? 'danger' : 'primary'}
+              size="sm"
+              loading={renewalVerifying}
+            >
+              Confirm Verification
             </Button>
           </div>
         </form>

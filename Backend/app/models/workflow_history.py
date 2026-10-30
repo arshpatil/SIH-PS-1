@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from app.extensions import db
 
 
@@ -55,6 +56,9 @@ class FDRWorkflowHistory(db.Model):
     # Relationships
     fdr = db.relationship("FDRRecord", back_populates="workflow_history")
     actor = db.relationship("User", foreign_keys=[actor_id])
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def to_dict(self, include_actor_email: bool = False) -> dict:
         """Serialize workflow history entry to dictionary, respecting privacy boundaries."""

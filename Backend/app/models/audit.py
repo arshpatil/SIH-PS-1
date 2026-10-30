@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from app.extensions import db
 
 
@@ -27,6 +28,9 @@ class AuditLog(db.Model):
 
     # Relationships
     user = db.relationship("User", back_populates="audit_logs")
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {

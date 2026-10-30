@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from app.extensions import db
 
 
@@ -32,6 +33,14 @@ class Institution(db.Model):
         back_populates="institution",
         cascade="all, delete-orphan",
     )
+    bank_verifications = db.relationship(
+        "BankVerificationLog",
+        back_populates="institution",
+        cascade="all, delete-orphan",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {

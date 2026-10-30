@@ -3,7 +3,10 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import db
 from app.models.audit import AuditLog
 from app.models.enums import UserRole
+from app.models.institution import Institution
 from app.models.user import User
+import re
+import uuid
 from app.security import (
     destroy_session,
     establish_session,
@@ -233,3 +236,149 @@ def update_profile():
         200,
     )
 
+
+
+@auth_bp.route("/register", methods=["POST"])
+def register():
+    """Public registration endpoint for new educational institutions.
+
+    Creates an Institution record and associated primary institution user account.
+    Public registration strictly assigns the INSTITUTION role. Privileged roles (ADMIN,
+    AICTE_OFFICER) are strictly rejected or ignored.
+    """
+    if not request.is_json:
+        return (
+            jsonify({"success": False, "error": "Request body must be valid JSON.", "code": "INVALID_JSON"}),
+            400,
+        )
+
+    data = request.get_json(silent=True) or {}
+
+    # 1. Reject explicit attempt to claim privileged roles
+    claimed_role = str(data.get("role", "")).strip().upper()
+    if claimed_role in (UserRole.ADMIN.value, UserRole.AICTE_OFFICER.value, "AICTE_ADMIN", "SYSTEM_ADMIN"):
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Privileged roles (Admin, AICTE Officer) cannot be registered publicly.",
+                    "code": "FORBIDDEN_ROLE",
+                }
+            ),
+            403,
+        )
+
+    # 2. Extract and validate required fields
+    inst_name = str(data.get("name") or data.get("institution_name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    contact_person = str(data.get("contact_person") or data.get("full_name") or data.get("principal_name", "")).strip()
+    contact_phone = str(data.get("contact_phone") or data.get("phone", "")).strip()
+    address = str(data.get("address", "")).strip()
+    inst_code = str(data.get("institution_code") or data.get("aicte_id", "")).strip()
+    password = str(data.get("password", ""))
+    confirm_password = str(data.get("confirm_password") or data.get("confirmPassword", ""))
+
+    errors = {}
+    if not inst_name or len(inst_name) < 2:
+        errors["name"] = "Institution name is required (minimum 2 characters)."
+    elif len(inst_name) > 255:
+        errors["name"] = "Institution name cannot exceed 255 characters."
+
+    if not email:
+        errors["email"] = "Official institution email is required."
+    elif not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        errors["email"] = "Please provide a valid email address format."
+
+    if not contact_person or len(contact_person) < 2:
+        errors["contact_person"] = "Contact person / principal name is required (minimum 2 characters)."
+    elif len(contact_person) > 150:
+        errors["contact_person"] = "Contact person name cannot exceed 150 characters."
+
+    if not password:
+        errors["password"] = "Password is required."
+    elif len(password) < 8:
+        errors["password"] = "Password must be at least 8 characters long."
+    elif not re.search(r"[A-Za-z]", password) or not re.search(r"[0-9]", password):
+        errors["password"] = "Password must contain both letters and at least one number."
+
+    if confirm_password and password != confirm_password:
+        errors["confirm_password"] = "Passwords do not match."
+
+    if errors:
+        return (
+            jsonify({"success": False, "error": "Validation failed for one or more fields.", "code": "VALIDATION_ERROR", "details": errors}),
+            400,
+        )
+
+    # 3. Check for existing duplicate user email
+    if User.query.filter_by(email=email).first():
+        return (
+            jsonify({"success": False, "error": f"An account with email '{email}' already exists.", "code": "EMAIL_ALREADY_EXISTS"}),
+            409,
+        )
+
+    # 4. Generate or validate institution code
+    if inst_code:
+        clean_code = inst_code.upper()
+        if Institution.query.filter_by(institution_code=clean_code).first():
+            return (
+                jsonify({"success": False, "error": f"An institution with code '{clean_code}' already exists.", "code": "INSTITUTION_CODE_EXISTS"}),
+                409,
+            )
+    else:
+        # Auto-generate unique AICTE registration code
+        clean_code = f"AICTE-REG-{uuid.uuid4().hex[:8].upper()}"
+        while Institution.query.filter_by(institution_code=clean_code).first():
+            clean_code = f"AICTE-REG-{uuid.uuid4().hex[:8].upper()}"
+
+    # 5. Transactional record creation
+    try:
+        new_inst = Institution(
+            institution_code=clean_code,
+            name=inst_name,
+            address=address if address else None,
+            contact_email=email,
+            contact_phone=contact_phone if contact_phone else None,
+        )
+        db.session.add(new_inst)
+        db.session.flush()
+
+        new_user = User(
+            full_name=contact_person,
+            email=email,
+            role=UserRole.INSTITUTION_USER.value,
+            institution_id=new_inst.id,
+            is_active=True,
+        )
+        new_user.set_password(password)
+        db.session.add(new_user)
+        db.session.flush()
+
+        # Audit log registration
+        audit = AuditLog(
+            user_id=new_user.id,
+            action="INSTITUTION_REGISTERED",
+            entity_type="Institution",
+            entity_id=new_inst.id,
+            details=f"Public registration: Institution '{new_inst.name}' (Code: {new_inst.institution_code}) registered by {new_user.email}.",
+        )
+        db.session.add(audit)
+        db.session.commit()
+    except Exception as ex:
+        db.session.rollback()
+        return (
+            jsonify({"success": False, "error": f"Failed to register institution: {str(ex)}", "code": "REGISTRATION_FAILED"}),
+            500,
+        )
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Institution registered successfully. You may now log in with your credentials.",
+                "institution": new_inst.to_dict(),
+                "user": new_user.to_safe_dict(),
+            }
+        ),
+        201,
+    )

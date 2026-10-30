@@ -22,6 +22,7 @@ import { SCHEDULED_BANKS } from '../constants/bankList'
 import { formatCurrency, formatFileSize } from '../utils/formatters'
 import { formatDate } from '../utils/dateUtils'
 import { useApp } from '../context/AppContext'
+import { fdrService } from '../services/fdrService'
 
 export function UploadFDRPage() {
   const navigate = useNavigate()
@@ -33,11 +34,13 @@ export function UploadFDRPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submittedFdrId, setSubmittedFdrId] = useState(null)
   const [validatedData, setValidatedData] = useState(null)
+  const [dupWarning, setDupWarning] = useState(null)
+  const [dupChecking, setDupChecking] = useState(false)
 
   const {
     register,
     handleSubmit,
-    watch,
+    getValues,
     reset,
     formState: { errors },
   } = useForm({
@@ -54,7 +57,27 @@ export function UploadFDRPage() {
     },
   })
 
-  const formValues = watch()
+  // Duplicate detection handler
+  const handleFdrBlur = async () => {
+    const num = getValues('fdrNumber')?.trim()
+    if (!num || num.length < 3) {
+      setDupWarning(null)
+      return
+    }
+    setDupChecking(true)
+    try {
+      const res = await fdrService.checkDuplicate(num)
+      if (res?.is_duplicate) {
+        setDupWarning(res)
+      } else {
+        setDupWarning(null)
+      }
+    } catch {
+      setDupWarning(null)
+    } finally {
+      setDupChecking(false)
+    }
+  }
 
   // Handle local file selection
   const handleFileChange = (e) => {
@@ -93,7 +116,7 @@ export function UploadFDRPage() {
   // Step 2 Submission -> Add to Backend & Upload Document
   const onFinalSubmit = async () => {
     setIsSubmitting(true)
-    const payload = validatedData || formValues
+    const payload = validatedData || getValues()
     try {
       const res = await addFDR(
         {
@@ -199,13 +222,38 @@ export function UploadFDRPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* FDR Number */}
-              <Input
-                label="FDR Reference / Receipt Number"
-                placeholder="e.g. FDR-SBI-2026-90812"
-                required
-                error={errors.fdrNumber?.message}
-                {...register('fdrNumber')}
-              />
+              <div className="space-y-1.5">
+                <Input
+                  label="FDR Reference / Receipt Number"
+                  placeholder="e.g. FDR-SBI-2026-90812"
+                  required
+                  error={errors.fdrNumber?.message}
+                  {...register('fdrNumber', {
+                    onBlur: handleFdrBlur,
+                  })}
+                />
+                {dupChecking && (
+                  <p className="text-2xs text-slate-500 italic">
+                    Verifying FDR receipt uniqueness in AICTE national repository...
+                  </p>
+                )}
+                {dupWarning && dupWarning.scope === 'INTERNAL' && (
+                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Internal Duplicate Warning:</strong> A Fixed Deposit Receipt with this reference number is already registered under your institution (ID #{dupWarning.existing_id}).
+                    </span>
+                  </div>
+                )}
+                {dupWarning && dupWarning.scope === 'CROSS_INSTITUTION' && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Registry Notice:</strong> An identical receipt identifier was previously indexed for another institution. Please re-check physical certificate details.
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Bank Name */}
               <Select
@@ -364,7 +412,7 @@ export function UploadFDRPage() {
 
       {/* STEP 2: REVIEW STEP */}
       {step === 2 && (() => {
-        const reviewData = validatedData || formValues
+        const reviewData = validatedData || getValues()
         return (
         <Card className="space-y-6">
           <CardHeader

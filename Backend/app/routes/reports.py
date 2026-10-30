@@ -2,7 +2,7 @@ from flask import Blueprint, Response, g, jsonify, request
 
 from app.security import login_required
 from app.services.fdr_service import FDRValidationError
-from app.services.report_service import export_fdr_csv, get_fdr_report
+from app.services.report_service import export_fdr_csv, get_fdr_report, get_petition_report, export_petitions_csv, get_audit_report
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
@@ -73,3 +73,46 @@ def export_csv():
             "Content-Type": "text/csv; charset=utf-8",
         },
     )
+
+
+@reports_bp.route("/petitions", methods=["GET"])
+@login_required
+def get_petitions_report_route():
+    """Paginated petition report with filtering across statuses, types, and assignees."""
+    filters = request.args.to_dict()
+    records, pagination, summary = get_petition_report(g.current_user, filters)
+    return jsonify({
+        "success": True,
+        "data": records,
+        "pagination": pagination,
+        "summary": summary,
+    }), 200
+
+
+@reports_bp.route("/petitions/export", methods=["GET"])
+@login_required
+def export_petitions_csv_route():
+    """Download filtered petitions report as CSV file."""
+    filters = request.args.to_dict()
+    csv_content, filename = export_petitions_csv(g.current_user, filters)
+    return Response(
+        csv_content,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "text/csv; charset=utf-8",
+        },
+    )
+
+
+@reports_bp.route("/audit", methods=["GET"])
+@login_required
+def get_audit_logs():
+    """Searchable, tenant-scoped audit trail of system activities."""
+    filters = request.args.to_dict()
+    records, pagination = get_audit_report(g.current_user, filters)
+    return jsonify({
+        "success": True,
+        "data": records,
+        "pagination": pagination,
+    }), 200

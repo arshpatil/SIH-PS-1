@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from sqlalchemy.orm import validates
 from app.extensions import db
 from app.models.enums import NotificationType
@@ -48,6 +49,9 @@ class Notification(db.Model):
                 f"Invalid notification type '{val}'. Valid options: {valid_types}"
             )
         return val
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {

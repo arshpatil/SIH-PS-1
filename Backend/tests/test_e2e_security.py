@@ -465,6 +465,7 @@ def test_security_client_payload_cannot_override_server_authorization(client, se
 
     # Record must be bound to Institution A, NOT the spoofed Institution B
     created_fdr = db.session.get(FDRRecord, res.get_json()["data"]["id"])
+    assert created_fdr is not None
     assert created_fdr.institution_id == env["inst_a"].id
     assert created_fdr.created_by == env["user_a"].id
 

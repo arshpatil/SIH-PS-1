@@ -4,7 +4,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models.audit import AuditLog
-from app.models.enums import NotificationType, UserRole, ValidityStatus
+from app.models.enums import NotificationType, ScrutinyStatus, UserRole, ValidityStatus
 from app.models.fdr import FDRRecord
 from app.models.notification import Notification
 from app.models.user import User
@@ -42,6 +42,26 @@ def classify_validity_status(
     return ValidityStatus.OVERDUE_ACTION
 
 
+def get_maturity_category(maturity_date: date, as_of_date: date | None = None) -> str:
+    """Return precise non-overlapping maturity brackets for dashboards and filtering."""
+    ref_date = get_business_date(as_of_date)
+    days_remaining = (maturity_date - ref_date).days
+
+    if days_remaining > 90:
+        return "FUTURE"
+    if 60 < days_remaining <= 90:
+        return "MATURING_90_DAYS"
+    if 30 < days_remaining <= 60:
+        return "MATURING_60_DAYS"
+    if 7 < days_remaining <= 30:
+        return "MATURING_30_DAYS"
+    if 0 <= days_remaining <= 7:
+        return "MATURING_7_DAYS"
+    if -30 < days_remaining < 0:
+        return "MATURED"
+    return "OVERDUE_ACTION"
+
+
 def scan_and_update_maturities(
     as_of_date: date | None = None,
     reminder_intervals: list[int] | None = None,
@@ -53,7 +73,7 @@ def scan_and_update_maturities(
     overdue_action_days = current_app.config.get("OVERDUE_ACTION_DAYS", 30)
     if reminder_intervals is None:
         reminder_intervals = current_app.config.get(
-            "REMINDER_INTERVAL_DAYS", [30, 15, 7, 0]
+            "REMINDER_INTERVAL_DAYS", [90, 60, 30, 15, 7, 0]
         )
 
     fdrs = FDRRecord.query.all()
@@ -74,7 +94,13 @@ def scan_and_update_maturities(
         User.is_active.is_(True),
     ).all()
 
+    fdr_emails_to_send = []
+
     for fdr in fdrs:
+        # Respect current status: Skip rejected FDRs
+        if fdr.scrutiny_status == ScrutinyStatus.REJECTED.value:
+            continue
+
         # 1. Update validity status (preserving officer scrutiny status and unrelated fields)
         calculated_status = classify_validity_status(
             fdr.maturity_date,
@@ -96,7 +122,25 @@ def scan_and_update_maturities(
         is_escalation = False
 
         if days_remaining in reminder_intervals:
-            if days_remaining == 30:
+            fdr_emails_to_send.append((fdr, days_remaining))
+            if days_remaining == 90:
+                title = f"FDR Maturity Advisory: {fdr.fdr_number} (90 Days Remaining)"
+                message = (
+                    f"Advance Advisory: Fixed Deposit Receipt {fdr.fdr_number} of {fdr.bank_name} "
+                    f"(INR {fdr.amount}) will mature on {fdr.maturity_date} (in 90 days). "
+                    "Please initiate timely renewal or AICTE lien release procedures."
+                )
+                notif_type = NotificationType.INFO
+
+            elif days_remaining == 60:
+                title = f"FDR Maturity Notice: {fdr.fdr_number} (60 Days Remaining)"
+                message = (
+                    f"Fixed Deposit Receipt {fdr.fdr_number} of {fdr.bank_name} "
+                    f"will mature in 60 days on {fdr.maturity_date}. Please prepare renewal documentation."
+                )
+                notif_type = NotificationType.INFO
+
+            elif days_remaining == 30:
                 title = f"FDR Maturity Reminder: {fdr.fdr_number} (30 Days Remaining)"
                 message = (
                     f"Fixed Deposit Receipt {fdr.fdr_number} of {fdr.bank_name} "
@@ -146,18 +190,15 @@ def scan_and_update_maturities(
             continue
 
         # 3. Determine recipients
-        # Always notify active users of the owning institution
         recipients = User.query.filter_by(
             institution_id=fdr.institution_id, is_active=True
         ).all()
 
-        # If escalation (urgent 7-day, maturity day, or overdue), also notify AICTE officers
         if is_escalation:
             recipients = list(set(recipients + officers))
 
         # 4. Idempotently generate notifications
         for recipient in recipients:
-            # Database-backed deduplication check
             already_sent = Notification.query.filter_by(
                 user_id=recipient.id, title=title
             ).first()
@@ -187,9 +228,24 @@ def scan_and_update_maturities(
     db.session.add(audit)
     db.session.commit()
 
+    # 5. Dispatch automated email notifications post-commit (strictly idempotent)
+    emails_sent_count = 0
+    from app.services.email_service import send_fdr_maturity_email
+
+    for fdr_item, rem_days in fdr_emails_to_send:
+        try:
+            sent_now = send_fdr_maturity_email(fdr_item, rem_days, as_of_date=ref_date)
+            emails_sent_count += sent_now
+        except Exception as email_err:
+            current_app.logger.error(
+                f"Non-fatal error delivering maturity reminder email for FDR {fdr_item.fdr_number}: {email_err}"
+            )
+
     return {
         "as_of_date": ref_date.isoformat(),
         "scanned_count": scanned_count,
         "updated_count": updated_count,
         "notifications_created": notifications_created,
+        "emails_sent_count": emails_sent_count,
     }
+

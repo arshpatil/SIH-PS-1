@@ -158,6 +158,27 @@ export const fdrService = {
     return { success: true, filename }
   },
 
+  /**
+   * Pre-check whether an FDR number matches an existing or normalized record.
+   */
+  async checkDuplicate(fdrNumber, institutionId = null) {
+    const payload = { fdr_number: fdrNumber }
+    if (institutionId) payload.institution_id = institutionId
+    const response = await apiClient.post('/fdr/check-duplicate', payload)
+    return response.data
+  },
+
+  /**
+   * AICTE Officer records verification decision on supporting document.
+   */
+  async verifyDocumentDecision(fdrId, docId, decision, remarks = '') {
+    const response = await apiClient.post(`/fdr/${fdrId}/documents/${docId}/verify`, {
+      decision,
+      remarks,
+    })
+    return response.data
+  },
+
   // -------------------------------------------------------------
   // Workflow Transition Methods
   // -------------------------------------------------------------

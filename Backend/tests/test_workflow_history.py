@@ -192,6 +192,7 @@ def test_history_and_status_rollback_together_on_failure(seed_history_env, monke
     # Roll back and verify
     db.session.rollback()
     refreshed = db.session.get(FDRRecord, fdr.id)
+    assert refreshed is not None
     assert refreshed.scrutiny_status == ScrutinyStatus.DRAFT.value
     # No history row must exist
     assert FDRWorkflowHistory.query.filter_by(fdr_id=fdr.id).count() == 0

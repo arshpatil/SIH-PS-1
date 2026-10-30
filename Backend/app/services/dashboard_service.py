@@ -64,10 +64,12 @@ def get_dashboard_statistics(current_user: User, institution_id: int | None = No
     validity_counts = {v.value: 0 for v in ValidityStatus}
     ref_date = get_business_date()
 
-    # Fetch maturity dates to compute real-time classification accurately across boundaries
-    fdr_date_rows = base_query.with_entities(FDRRecord.maturity_date).all()
-    for row in fdr_date_rows:
-        if row.maturity_date:
+    # Fetch maturity dates and validity status to compute real-time classification accurately across boundaries
+    fdr_rows = base_query.with_entities(FDRRecord.maturity_date, FDRRecord.validity_status).all()
+    for row in fdr_rows:
+        if row.validity_status == ValidityStatus.RENEWAL_PENDING_VERIFICATION.value:
+            validity_counts[ValidityStatus.RENEWAL_PENDING_VERIFICATION.value] += 1
+        elif row.maturity_date:
             val_enum = classify_validity_status(row.maturity_date, as_of_date=ref_date)
             validity_counts[val_enum.value] += 1
         else:

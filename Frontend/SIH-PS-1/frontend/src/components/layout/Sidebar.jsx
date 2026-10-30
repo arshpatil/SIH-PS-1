@@ -6,6 +6,7 @@ import {
   UploadCloud,
   FileCheck2,
   Bell,
+  Calendar,
   Building2,
   LogOut,
   ShieldCheck,
@@ -18,16 +19,14 @@ import { cn } from '../../utils/cn'
 export function Sidebar({ isOpen, onClose, onOpenLogout }) {
   const { unreadCount, profile, currentUser } = useApp()
 
-  const isOfficerOrAdmin =
-    currentUser?.role === 'AICTE_OFFICER' ||
-    currentUser?.role === 'ADMIN' ||
-    currentUser?.role_category === 'AICTE_OFFICER' ||
-    currentUser?.role_category === 'ADMIN'
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role_category === 'ADMIN'
+  const isOfficer = currentUser?.role === 'AICTE_OFFICER' || currentUser?.role_category === 'AICTE_OFFICER'
+  const isOfficerOrAdmin = isAdmin || isOfficer
 
   const navItems = [
     {
       to: '/',
-      label: isOfficerOrAdmin ? 'Overview & Metrics' : 'Dashboard',
+      label: isAdmin ? 'Admin Oversight' : isOfficer ? 'Scrutiny Workbench' : 'Dashboard',
       icon: LayoutDashboard,
       end: true,
     },
@@ -51,6 +50,11 @@ export function Sidebar({ isOpen, onClose, onOpenLogout }) {
       icon: FileCheck2,
     },
     {
+      to: '/calendar',
+      label: 'FDR Calendar',
+      icon: Calendar,
+    },
+    {
       to: '/notifications',
       label: 'Notifications',
       icon: Bell,
@@ -58,7 +62,7 @@ export function Sidebar({ isOpen, onClose, onOpenLogout }) {
     },
     {
       to: '/profile',
-      label: isOfficerOrAdmin ? 'Officer Profile' : 'Profile & Settings',
+      label: isAdmin ? 'Admin Profile' : isOfficer ? 'Officer Profile' : 'Profile & Settings',
       icon: isOfficerOrAdmin ? UserCheck : Building2,
     },
   ]

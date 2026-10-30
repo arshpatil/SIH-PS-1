@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import os
@@ -84,7 +85,7 @@ def extract_text_from_pdf(file_path: Path | str, max_pages: int = 20) -> tuple[s
         for page_idx in range(total_pages):
             page = doc[page_idx]
             pix = page.get_pixmap(dpi=150)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             ocr_text = pytesseract.image_to_string(img)
             ocr_pages.append(ocr_text)
 
@@ -159,7 +160,7 @@ def parse_date_heuristic(raw: str) -> date | None:
 
 def extract_fdr_fields(text: str) -> dict:
     """Extract FDR fields from text using pattern matching heuristics."""
-    extracted = {
+    extracted: dict[str, Any] = {
         "fdr_number": None,
         "bank_name": None,
         "branch_name": None,

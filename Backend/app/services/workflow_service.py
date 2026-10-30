@@ -411,7 +411,7 @@ def transition_fdr_scrutiny_status(
         )
         db.session.add(audit)
 
-        # 5. Generate contextual notifications for relevant users
+        # 5. Generate contextual in-app notifications for relevant users
         _generate_scrutiny_notifications(
             fdr=fdr,
             previous_status=previous_status,
@@ -421,6 +421,26 @@ def transition_fdr_scrutiny_status(
         )
 
         db.session.commit()
+
+        # 6. Post-commit statutory email notification (strictly non-blocking on failure)
+        try:
+            from app.services.email_service import send_fdr_scrutiny_status_email
+
+            send_fdr_scrutiny_status_email(
+                fdr=fdr,
+                new_status=new_status,
+                previous_status=previous_status,
+                remarks=clean_remarks,
+                actor=current_user,
+            )
+        except Exception as email_err:
+            logger.error(
+                "Non-fatal error delivering scrutiny status email for FDR %s [%s]: %s",
+                fdr.fdr_number,
+                new_status,
+                email_err,
+            )
+
         return fdr
 
     except Exception:

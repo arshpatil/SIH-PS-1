@@ -3,6 +3,9 @@
   "plugins": ["react", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "react/react-in-jsx-scope": "off",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/preserve-caught-error": "off"
   }
 }

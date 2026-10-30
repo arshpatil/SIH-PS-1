@@ -38,6 +38,8 @@ def init_db(app: Flask | None = None) -> None:
                 "Automatic db initialization is disabled in production. Use migration scripts."
             )
         db.create_all()
+        from app.services.migration_service import ensure_schema_updates
+        ensure_schema_updates()
     finally:
         if ctx:
             ctx.pop()
@@ -46,7 +48,7 @@ def init_db(app: Flask | None = None) -> None:
 def create_app(config_name: str | None = None) -> Flask:
     """Application factory for AICTE Security Deposit / FDR Management Portal."""
     # Load environment variables from .env if present
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
     if config_name is None:
         config_name = os.getenv("FLASK_ENV", "development").lower()
@@ -86,6 +88,16 @@ def create_app(config_name: str | None = None) -> Flask:
     # Import models so SQLAlchemy metadata is aware of all tables
     from app import models as _models  # noqa: F401
 
+    # Safely verify incremental schema updates (non-destructive table/column migrations)
+    env = os.getenv("FLASK_ENV", "development").lower()
+    if env != "production":
+        try:
+            with app.app_context():
+                from app.services.migration_service import ensure_schema_updates
+                ensure_schema_updates()
+        except Exception as mig_err:
+            app.logger.warning("Automatic schema migration check notice: %s", mig_err)
+
     # Register blueprints
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
@@ -98,6 +110,10 @@ def create_app(config_name: str | None = None) -> Flask:
     app.register_blueprint(reports_bp)
     from app.routes.requests import requests_bp
     app.register_blueprint(requests_bp)
+    from app.routes.bank import bank_bp
+    app.register_blueprint(bank_bp)
+    from app.routes.calendar import calendar_bp
+    app.register_blueprint(calendar_bp)
 
     # Safe CLI command to initialize database for development
     @app.cli.command("init-db")
@@ -111,6 +127,8 @@ def create_app(config_name: str | None = None) -> Flask:
             return
 
         db.create_all()
+        from app.services.migration_service import ensure_schema_updates
+        ensure_schema_updates()
         click.echo("Initialized database tables successfully.")
 
     # Safe CLI command to provision initial administrator
@@ -187,13 +205,63 @@ def create_app(config_name: str | None = None) -> Flask:
                 click.echo("Error: Invalid date format. Please use YYYY-MM-DD.")
                 return
 
+        from app.services.email_service import scan_and_send_receipt_reminders
+
         result = scan_and_update_maturities(as_of_date=as_of)
+        receipt_emails = scan_and_send_receipt_reminders(as_of_date=as_of)
         click.echo(
             f"Maturity scan completed for {result['as_of_date']}: "
             f"Scanned {result['scanned_count']} FDR(s), "
             f"Updated {result['updated_count']} status(es), "
-            f"Generated {result['notifications_created']} notification(s)."
+            f"Generated {result['notifications_created']} notification(s), "
+            f"Dispatched {result.get('emails_sent_count', 0)} maturity email(s), "
+            f"Dispatched {receipt_emails} receipt reminder email(s)."
         )
+
+    # Safe CLI command to test email configuration without notifying all institutions
+    @app.cli.command("test-email")
+    @click.option(
+        "--recipient",
+        prompt="Recipient Email",
+        help="Target recipient email address for test message.",
+    )
+    def test_email_cli(recipient):
+        """Safely test SMTP configuration by sending a single diagnostic email."""
+        from app.services.email_service import send_test_email
+
+        click.echo(f"Initiating SMTP diagnostic test to '{recipient}'...")
+        res = send_test_email(recipient)
+        if isinstance(res, tuple):
+            smtp_ok = bool(res[0])
+            db_ok = True
+            msg = res[1] if len(res) > 1 else ""
+            smtp_err = msg if not smtp_ok else None
+            db_err = None
+        elif hasattr(res, "get"):
+            smtp_ok = res.get("smtp_success", False)
+            db_ok = res.get("db_logged", False)
+            msg = res.get("message", "")
+            smtp_err = res.get("smtp_error", msg)
+            db_err = res.get("db_error")
+        else:
+            smtp_ok = bool(res)
+            db_ok = True
+            msg = str(res)
+            smtp_err = None
+            db_err = None
+
+        if smtp_ok:
+            click.echo(click.style("-> SMTP DELIVERY: SUCCESS (Accepted by mail server)", fg="green"))
+            if db_ok:
+                click.echo(click.style("-> DATABASE AUDIT: SUCCESS (Logged in email_notification_logs)", fg="green"))
+            else:
+                click.echo(click.style(f"-> DATABASE AUDIT: WARNING ({db_err})", fg="yellow"))
+            click.echo(click.style(f"SUCCESS: {msg}", fg="cyan"))
+        else:
+            click.echo(click.style(f"-> SMTP DELIVERY: FAILED ({smtp_err})", fg="red"))
+            if db_ok:
+                click.echo(click.style("-> DATABASE AUDIT: RECORDED (Failure logged)", fg="yellow"))
+            click.echo(click.style(f"FAILURE: {msg}", fg="red"))
 
     # Safe CLI command to migrate fdr_workflow_history and backfill audit records
     @app.cli.command("migrate-workflow-history")

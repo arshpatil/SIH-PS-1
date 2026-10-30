@@ -2,13 +2,93 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, ArrowRight, Eye, CalendarClock } from 'lucide-react'
 import { Card, CardHeader } from '../ui/Card'
-import { FDRStatusBadge } from '../fdr/FDRStatusBadge'
 import { formatCurrency } from '../../utils/formatters'
 import { formatDate } from '../../utils/dateUtils'
 import { useApp } from '../../context/AppContext'
 
 export function UpcomingMaturitiesTable() {
-  const { upcomingMaturities } = useApp()
+  const { upcomingMaturities, requests } = useApp()
+
+  const renderPetitionStatus = (fdr) => {
+    const petition =
+      fdr.latestRequest ||
+      fdr.latest_request ||
+      requests.find((r) => String(r.fdrId || r.fdr_id) === String(fdr.id))
+
+    if (!petition) {
+      return (
+        <span className="text-2xs text-slate-400 italic">
+          No petition submitted
+        </span>
+      )
+    }
+
+    const status = petition.status || 'Submitted'
+    const hasReceipt = Boolean(
+      petition.renewalSubmittedAt ||
+      petition.renewal_submitted_at ||
+      petition.renewalDocument ||
+      petition.renewal_document
+    )
+
+    if (petition.requestType === 'Renewal' || petition.request_type === 'Renewal') {
+      if (status === 'Submitted') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            Renewal request submitted
+          </span>
+        )
+      }
+      if (status === 'Under Review') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            Renewal request under review
+          </span>
+        )
+      }
+      if (status === 'Approved' && !hasReceipt) {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
+            Renewal request approved — upload renewed FDR receipt
+          </span>
+        )
+      }
+      if (status === 'Pending Verification' || (status === 'Approved' && hasReceipt)) {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+            Renewed receipt awaiting verification
+          </span>
+        )
+      }
+      if (status === 'Closed') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            Renewal verified — next maturity: {formatDate(fdr.maturityDate)}
+          </span>
+        )
+      }
+      if (status === 'Documents Required') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-orange-50 text-orange-800 border border-orange-200">
+            Deficiency: Documents required
+          </span>
+        )
+      }
+      if (status === 'Rejected') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+            Renewal rejected
+          </span>
+        )
+      }
+    }
+
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-slate-100 text-slate-700">
+        {petition.requestType || petition.request_type}: {status}
+      </span>
+    )
+  }
 
   return (
     <Card className="flex flex-col h-full">
@@ -41,8 +121,8 @@ export function UpcomingMaturitiesTable() {
                 <th className="py-2.5 px-4">Bank Name</th>
                 <th className="py-2.5 px-4">Amount</th>
                 <th className="py-2.5 px-4">Maturity Date</th>
-                <th className="py-2.5 px-4">Days Left</th>
-                <th className="py-2.5 px-4">Status</th>
+                <th className="py-2.5 px-4">FDR Maturity Status</th>
+                <th className="py-2.5 px-4">Petition Status</th>
                 <th className="py-2.5 px-4 text-right">Action</th>
               </tr>
             </thead>
@@ -71,7 +151,7 @@ export function UpcomingMaturitiesTable() {
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           fdr.daysRemaining <= 10
                             ? 'bg-rose-100 text-rose-800 border border-rose-200'
                             : fdr.daysRemaining <= 30
@@ -82,11 +162,11 @@ export function UpcomingMaturitiesTable() {
                         {fdr.daysRemaining <= 15 && (
                           <AlertCircle className="w-3 h-3 text-amber-600" />
                         )}
-                        {fdr.daysRemaining} days
+                        Maturity in {fdr.daysRemaining} days
                       </span>
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <FDRStatusBadge status={fdr.status} size="sm" />
+                    <td className="py-3 px-4">
+                      {renderPetitionStatus(fdr)}
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <Link
@@ -107,3 +187,4 @@ export function UpcomingMaturitiesTable() {
     </Card>
   )
 }
+

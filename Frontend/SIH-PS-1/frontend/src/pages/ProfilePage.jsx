@@ -16,10 +16,36 @@ import { Input } from '../components/ui/Input'
 import { profileSchema } from '../schemas/profileSchema'
 import { formatDate } from '../utils/dateUtils'
 import { useApp } from '../context/AppContext'
+import { reportService } from '../services/reportService'
+import { Loader2 } from 'lucide-react'
 
 export function ProfilePage() {
   const { profile, currentUser, updateProfile, showToast } = useApp()
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const [auditLogs, setAuditLogs] = useState([])
+  const [auditLoading, setAuditLoading] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+    async function fetchAudit() {
+      setAuditLoading(true)
+      try {
+        const res = await reportService.getAuditLogs({ per_page: 15 })
+        if (isMounted && res?.data) {
+          setAuditLogs(res.data)
+        }
+      } catch {
+        // Fallback silently if audit logs cannot be fetched
+      } finally {
+        if (isMounted) setAuditLoading(false)
+      }
+    }
+    fetchAudit()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const isOfficerOrAdmin =
     currentUser?.role === 'AICTE_OFFICER' || currentUser?.role === 'ADMIN'
@@ -83,7 +109,7 @@ export function ProfilePage() {
         pincode: data.pincode,
       })
       reset(data)
-    } catch (err) {
+    } catch {
       console.error('Failed to update profile:', err)
     } finally {
       setIsSubmitting(false)
@@ -107,13 +133,14 @@ export function ProfilePage() {
 
   // Officer / Admin profile state
   const [officerName, setOfficerName] = useState(currentUser?.full_name || '')
-  const isOfficerDirty = officerName.trim() !== (currentUser?.full_name || '')
+  const [prevFullName, setPrevFullName] = useState(currentUser?.full_name)
 
-  useEffect(() => {
-    if (currentUser?.full_name) {
-      setOfficerName(currentUser.full_name)
-    }
-  }, [currentUser?.full_name])
+  if (currentUser?.full_name && currentUser.full_name !== prevFullName) {
+    setPrevFullName(currentUser.full_name)
+    setOfficerName(currentUser.full_name)
+  }
+
+  const isOfficerDirty = officerName.trim() !== (currentUser?.full_name || '')
 
   const onSubmitOfficer = async (e) => {
     e.preventDefault()
@@ -487,6 +514,61 @@ export function ProfilePage() {
           </Button>
         </div>
       </form>
+      {/* Audit Trail & Regulatory Activity History */}
+      <Card>
+        <CardHeader
+          title="Audit Trail & Regulatory History"
+          subtitle="Immutable transaction events and administrative actions recorded under this account"
+        />
+
+        {auditLoading ? (
+          <div className="py-8 flex items-center justify-center gap-2 text-slate-500 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin text-[#142B4A]" />
+            <span>Loading security audit records...</span>
+          </div>
+        ) : auditLogs.length === 0 ? (
+          <p className="text-slate-400 italic py-6 text-center text-xs">
+            No recent audit trail entries logged.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50">
+                  <th className="py-2.5 px-3">Timestamp</th>
+                  <th className="py-2.5 px-3">Actor</th>
+                  <th className="py-2.5 px-3">Action Event</th>
+                  <th className="py-2.5 px-3">Target Entity</th>
+                  <th className="py-2.5 px-3">Audit Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {auditLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">
+                      {formatDate(log.created_at)}
+                    </td>
+                    <td className="py-2.5 px-3 font-medium text-slate-900">
+                      {log.user_name || log.user_email || `User #${log.user_id || 'System'}`}
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span className="font-mono px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800 font-semibold">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-600">
+                      {log.target_type ? `${log.target_type} #${log.target_id || ''}` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600">
+                      {log.details || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

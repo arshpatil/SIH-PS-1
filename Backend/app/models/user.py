@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.extensions import db
@@ -97,6 +98,9 @@ class User(db.Model):
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         data = {

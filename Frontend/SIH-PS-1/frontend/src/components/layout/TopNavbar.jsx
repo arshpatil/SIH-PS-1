@@ -37,13 +37,18 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
 
   // Derive page title from pathname
   const getPageTitle = (pathname) => {
-    if (pathname === '/') return isOfficerOrAdmin ? 'AICTE Scrutiny Overview' : 'Institution Overview'
+    if (pathname === '/') {
+      if (userRole === 'ADMIN') return 'AICTE Central Administration'
+      if (userRole === 'AICTE_OFFICER') return 'Scrutiny Officer Workbench'
+      return 'Institution Overview'
+    }
     if (pathname.startsWith('/fdrs/')) return 'FDR Record Details & Workflow'
     if (pathname === '/fdrs') return isOfficerOrAdmin ? 'AICTE FDR Scrutiny Repository' : 'Fixed Deposit Receipts'
     if (pathname === '/upload') return 'Register New FDR'
     if (pathname === '/requests') return 'Renewal & Release Petitions'
+    if (pathname === '/calendar') return 'FDR Maturity & Renewal Calendar'
     if (pathname === '/notifications') return 'System Notifications'
-    if (pathname === '/profile') return isOfficerOrAdmin ? 'Officer Profile' : 'Institutional Profile & Settings'
+    if (pathname === '/profile') return userRole === 'ADMIN' ? 'Administrator Profile' : isOfficerOrAdmin ? 'Officer Profile' : 'Institutional Profile & Settings'
     return 'Portal Dashboard'
   }
 
@@ -53,6 +58,7 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
     if (pathname === '/fdrs') return 'Dashboard / FDRs'
     if (pathname === '/upload') return 'Dashboard / Upload New FDR'
     if (pathname === '/requests') return 'Dashboard / Requests'
+    if (pathname === '/calendar') return 'Dashboard / Calendar'
     if (pathname === '/notifications') return 'Dashboard / Notifications'
     if (pathname === '/profile') return 'Dashboard / Profile'
     return 'Dashboard'
@@ -60,41 +66,51 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-slate-200/80 shadow-2xs">
-      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
+      <div className="flex items-center justify-between px-3 sm:px-6 lg:px-8 h-16 min-w-0">
         {/* Left Side: Mobile Menu Button & Breadcrumb */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1 mr-2">
           <button
             type="button"
             onClick={onOpenMobileSidebar}
-            className="md:hidden p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none"
+            className="md:hidden p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none shrink-0"
             aria-label="Open sidebar menu"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div>
-            <p className="text-2xs font-semibold text-slate-600 tracking-wide uppercase hidden sm:block">
+          <div className="min-w-0">
+            <p className="text-2xs font-semibold text-slate-500 tracking-wide uppercase hidden sm:block truncate">
               {getBreadcrumb(location.pathname)}
             </p>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
               {getPageTitle(location.pathname)}
             </h1>
           </div>
         </div>
 
         {/* Right Side: Institution Badge, Notifications, User Menu */}
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 shrink-0">
+          {/* Bank Integration Prototype Indicator */}
+          <div
+            className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-2xs font-bold uppercase bg-amber-50 text-amber-800 border border-amber-300 tracking-wider shadow-2xs whitespace-nowrap shrink-0"
+            title="Prototype Integration: Core banking verification runs on synthetic mock data. No real bank network connected."
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span className="hidden sm:inline">Bank Demo Mode</span>
+            <span className="inline sm:hidden">Demo</span>
+          </div>
+
           {/* Institutional / Bureau Badge - Desktop only */}
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-            <Building className="w-3.5 h-3.5 text-[#142B4A]" />
-            <span
-              className="font-semibold text-slate-700 truncate max-w-[200px]"
-              title={isOfficerOrAdmin ? 'AICTE Clearance Bureau' : profile.collegeName}
-            >
+          <div
+            className="hidden md:flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs max-w-[200px] xl:max-w-[280px]"
+            title={isOfficerOrAdmin ? 'AICTE Clearance Bureau' : `${profile.collegeName} (${profile.aictePermanentId})`}
+          >
+            <Building className="w-3.5 h-3.5 text-[#142B4A] shrink-0" />
+            <span className="font-semibold text-slate-700 truncate">
               {isOfficerOrAdmin ? 'AICTE Clearance Bureau' : profile.collegeName}
             </span>
-            <span className="text-slate-400">|</span>
-            <span className="text-slate-500 font-mono text-[11px]">
+            <span className="text-slate-400 shrink-0">|</span>
+            <span className="text-slate-500 font-mono text-[11px] shrink-0">
               {isOfficerOrAdmin ? 'OFFICER DESK' : profile.aictePermanentId}
             </span>
           </div>
@@ -102,7 +118,7 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
           {/* Notifications Link */}
           <Link
             to="/notifications"
-            className="relative p-2 rounded-lg text-slate-600 hover:text-[#142B4A] hover:bg-slate-100 transition-colors"
+            className="relative p-2 rounded-lg text-slate-600 hover:text-[#142B4A] hover:bg-slate-100 transition-colors shrink-0"
             title="Notifications"
           >
             <Bell className="w-5 h-5" />
@@ -114,24 +130,24 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
           </Link>
 
           {/* User Profile Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none text-left"
+              className="flex items-center gap-2 p-1 sm:p-1.5 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none text-left"
             >
-              <div className="w-8 h-8 rounded-full bg-[#142B4A] text-white flex items-center justify-center font-semibold text-xs shadow-xs">
+              <div className="w-8 h-8 rounded-full bg-[#142B4A] text-white flex items-center justify-center font-semibold text-xs shadow-xs shrink-0">
                 {initials}
               </div>
-              <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-slate-800 leading-none truncate max-w-[140px]">
+              <div className="hidden sm:block min-w-0">
+                <p className="text-xs font-semibold text-slate-800 leading-none truncate max-w-[120px] lg:max-w-[150px]">
                   {userName}
                 </p>
-                <p className="text-[11px] text-slate-500 leading-none mt-1">
+                <p className="text-[11px] text-slate-500 leading-none mt-1 truncate">
                   {userRole}
                 </p>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block shrink-0" />
             </button>
 
             {/* Dropdown Menu */}

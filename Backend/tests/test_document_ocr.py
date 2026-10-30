@@ -170,6 +170,7 @@ def test_upload_valid_pdf_and_discrepancy_match(client, doc_test_env):
 
     # Verify registered FDR record was NOT altered by OCR
     fdr = db.session.get(FDRRecord, fdr_id)
+    assert fdr is not None
     assert fdr.amount == Decimal("500000.00")
     assert fdr.fdr_number == "FDR-DOC-101"
 
@@ -353,7 +354,7 @@ def test_encrypted_and_corrupt_pdf_handling(client, doc_test_env):
     doc = pymupdf.open()
     doc.new_page().insert_text((50, 72), "Encrypted content")
     enc_bytes = doc.tobytes(
-        encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="testpassword"
+        encryption=getattr(pymupdf, "PDF_ENCRYPT_AES_256", 4), user_pw="testpassword"
     )
     doc.close()
 

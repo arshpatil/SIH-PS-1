@@ -1,5 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import logging
+import os
+from unittest.mock import MagicMock, patch
 import pytest
 
 from app.extensions import db
@@ -13,7 +16,12 @@ from app.services.maturity_service import (
     get_business_date,
     scan_and_update_maturities,
 )
-from app.services.scheduler import init_scheduler
+from app.services.scheduler import (
+    get_scheduler,
+    init_scheduler,
+    run_scheduled_maturity_scan,
+    shutdown_scheduler,
+)
 
 
 @pytest.fixture
@@ -208,6 +216,7 @@ def test_scan_preserves_officer_scrutiny_status(app, seed_notification_env):
         scan_and_update_maturities(as_of_date=ref_date)
 
     updated_fdr = db.session.get(FDRRecord, fdr.id)
+    assert updated_fdr is not None
     assert updated_fdr.validity_status == ValidityStatus.MATURED.value
     # Scrutiny status and other fields must remain completely untouched
     assert updated_fdr.scrutiny_status == ScrutinyStatus.VERIFIED.value
@@ -431,6 +440,7 @@ def test_mark_notification_as_read(client, seed_notification_env):
 
     # Verify DB state
     refreshed = db.session.get(Notification, notif.id)
+    assert refreshed is not None
     assert refreshed.is_read is True
 
 
@@ -492,7 +502,8 @@ def test_cannot_access_or_modify_other_user_notifications(client, seed_notificat
     assert res_patch.status_code == 404
 
     # User A's notification must remain unread
-    assert db.session.get(Notification, notif_a.id).is_read is False
+    notif_check = db.session.get(Notification, notif_a.id)
+    assert notif_check is not None and notif_check.is_read is False
 
     # User B lists notifications; must not contain User A's notification
     res_list = client.get("/api/notifications")
@@ -557,6 +568,91 @@ def test_cli_scan_fdr_maturities_invalid_date(runner):
 
 def test_scheduler_disabled_in_testing(app):
     """Verify that the background scheduler does not start during testing."""
-    # In testing environment (TESTING=True), init_scheduler should return None
     scheduler = init_scheduler(app)
     assert scheduler is None
+
+
+def test_scheduler_initialization_and_job_registration():
+    """Verify that the scheduler starts when enabled and registers fdr_maturity_scanner."""
+    shutdown_scheduler()
+    try:
+        test_app = MagicMock()
+        test_app.config = {"SCHEDULER_ENABLED": True, "TESTING": False}
+        test_app.logger = logging.getLogger("test")
+
+        scheduler = init_scheduler(test_app)
+        assert scheduler is not None
+        assert scheduler.running is True
+
+        jobs = scheduler.get_jobs()
+        job_ids = [j.id for j in jobs]
+        assert "fdr_maturity_scanner" in job_ids
+
+        job = scheduler.get_job("fdr_maturity_scanner")
+        assert job.name == "Daily FDR Maturity and Notification Scanner"
+        trigger_str = str(job.trigger)
+        assert "hour='0'" in trigger_str
+        assert "minute='0'" in trigger_str
+    finally:
+        shutdown_scheduler()
+
+
+def test_scheduler_duplicate_prevention():
+    """Verify that subsequent calls to init_scheduler reuse the existing instance and don't duplicate jobs."""
+    shutdown_scheduler()
+    try:
+        test_app = MagicMock()
+        test_app.config = {"SCHEDULER_ENABLED": True, "TESTING": False}
+        test_app.logger = logging.getLogger("test")
+
+        s1 = init_scheduler(test_app)
+        assert s1 is not None and s1.running is True
+
+        s2 = init_scheduler(test_app)
+        assert s1 is s2
+        assert len(s2.get_jobs()) == 1
+    finally:
+        shutdown_scheduler()
+
+
+def test_run_scheduled_maturity_scan_success(app):
+    """Verify run_scheduled_maturity_scan executes scan services inside app context."""
+    with patch("app.services.maturity_service.scan_and_update_maturities") as mock_mat, \
+         patch("app.services.email_service.scan_and_send_receipt_reminders") as mock_rec:
+        mock_mat.return_value = {
+            "scanned_count": 5,
+            "updated_count": 2,
+            "emails_sent_count": 1,
+            "notifications_generated": 2,
+        }
+        mock_rec.return_value = 3
+
+        result = run_scheduled_maturity_scan(app)
+        assert result["success"] is True
+        assert result["maturity_result"]["scanned_count"] == 5
+        assert result["receipt_emails"] == 3
+        mock_mat.assert_called_once()
+        mock_rec.assert_called_once()
+
+
+def test_run_scheduled_maturity_scan_resilience_to_errors(app):
+    """Verify run_scheduled_maturity_scan catches unexpected exceptions without terminating scheduler."""
+    with patch("app.services.maturity_service.scan_and_update_maturities", side_effect=RuntimeError("DB Connection Error")):
+        result = run_scheduled_maturity_scan(app)
+        assert result["success"] is False
+        assert "DB Connection Error" in result["error"]
+
+
+def test_scheduler_cli_reloader_parent_suppression():
+    """Verify that under FLASK_RUN_FROM_CLI without WERKZEUG_RUN_MAIN, scheduler is not started in parent."""
+    shutdown_scheduler()
+    try:
+        test_app = MagicMock()
+        test_app.config = {"SCHEDULER_ENABLED": True, "TESTING": False}
+        test_app.logger = logging.getLogger("test")
+
+        with patch.dict(os.environ, {"FLASK_RUN_FROM_CLI": "true", "WERKZEUG_RUN_MAIN": ""}):
+            scheduler = init_scheduler(test_app)
+            assert scheduler is None
+    finally:
+        shutdown_scheduler()

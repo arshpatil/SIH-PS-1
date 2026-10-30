@@ -43,8 +43,8 @@ export function AppProvider({ children }) {
   // Data Fetching Functions
   // -----------------------------------------------------------
 
-  const refreshFDRs = useCallback(async () => {
-    setFdrLoading(true)
+  const refreshFDRs = useCallback(async (showLoading = false) => {
+    if (showLoading) setFdrLoading(true)
     try {
       const res = await fdrService.listFDRs({ per_page: 50 })
       if (res && Array.isArray(res.data) && res.data.length > 0) {
@@ -53,7 +53,7 @@ export function AppProvider({ children }) {
     } catch {
       // Keep existing FDRs if fetch fails
     } finally {
-      setFdrLoading(false)
+      if (showLoading) setFdrLoading(false)
     }
   }, [])
 
@@ -161,13 +161,34 @@ export function AppProvider({ children }) {
 
   // Fetch authenticated data once logged in
   useEffect(() => {
-    if (isAuthenticated) {
-      refreshFDRs()
-      refreshDashboard()
-      refreshNotifications()
-      refreshRequests()
+    if (!isAuthenticated) return
+
+    let isMounted = true
+    const loadAuthData = async () => {
+      try {
+        const [fdrRes] = await Promise.allSettled([
+          fdrService.listFDRs({ per_page: 50 }),
+        ])
+        if (isMounted && fdrRes.status === 'fulfilled' && fdrRes.value?.data?.length > 0) {
+          setFdrs(fdrRes.value.data)
+        }
+      } catch {
+        // Fallback
+      }
+
+      if (isMounted) {
+        refreshDashboard()
+        refreshNotifications()
+        refreshRequests()
+      }
     }
-  }, [isAuthenticated, refreshFDRs, refreshDashboard, refreshNotifications, refreshRequests])
+
+    loadAuthData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isAuthenticated, refreshDashboard, refreshNotifications, refreshRequests])
 
   // -----------------------------------------------------------
   // Auth Operations
@@ -197,7 +218,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       const errMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Invalid credentials'
       showToast(errMsg, 'error')
-      throw new Error(errMsg)
+      throw new Error(errMsg, { cause: err })
     }
   }
 
@@ -248,7 +269,7 @@ export function AppProvider({ children }) {
         err.message ||
         'Failed to create FDR'
       showToast(errMsg, 'error')
-      throw new Error(errMsg)
+      throw new Error(errMsg, { cause: err })
     }
   }
 
@@ -261,7 +282,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to update FDR'
       showToast(errMsg, 'error')
-      throw new Error(errMsg)
+      throw new Error(errMsg, { cause: err })
     }
   }
 
@@ -280,6 +301,8 @@ export function AppProvider({ children }) {
       const created = await requestService.createRequest(requestData)
       setRequests((prev) => [created, ...prev])
       refreshDashboard()
+      refreshRequests()
+      refreshNotifications()
       showToast(`Petition ${created.id} submitted successfully!`, 'success')
       return created
     } catch (err) {
@@ -289,7 +312,41 @@ export function AppProvider({ children }) {
         err.message ||
         'Failed to submit petition'
       showToast(errMsg, 'error')
-      throw new Error(errMsg)
+      throw new Error(errMsg, { cause: err })
+    }
+  }
+
+  const submitRenewalDetails = async (requestId, payload) => {
+    try {
+      const data = await requestService.submitRenewalDetails(requestId, payload)
+      await Promise.allSettled([refreshDashboard(), refreshRequests(), refreshNotifications(), refreshFDRs()])
+      showToast('Renewed FDR receipt submitted successfully!', 'success')
+      return data
+    } catch (err) {
+      const errMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to submit renewal receipt'
+      showToast(errMsg, 'error')
+      throw new Error(errMsg, { cause: err })
+    }
+  }
+
+  const verifyRenewal = async (requestId, payload) => {
+    try {
+      const data = await requestService.verifyRenewal(requestId, payload)
+      await Promise.allSettled([refreshDashboard(), refreshRequests(), refreshNotifications(), refreshFDRs()])
+      showToast('Renewal decision recorded successfully!', 'success')
+      return data
+    } catch (err) {
+      const errMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to record renewal verification'
+      showToast(errMsg, 'error')
+      throw new Error(errMsg, { cause: err })
     }
   }
 
@@ -356,7 +413,7 @@ export function AppProvider({ children }) {
         err.message ||
         'Failed to save profile'
       showToast(errMsg, 'error')
-      throw new Error(errMsg)
+      throw new Error(errMsg, { cause: err })
     }
   }
 
@@ -459,6 +516,8 @@ export function AppProvider({ children }) {
     updateFDR,
     getFDRById,
     addRequest,
+    submitRenewalDetails,
+    verifyRenewal,
     markAsRead,
     markAllAsRead,
     updateProfile,

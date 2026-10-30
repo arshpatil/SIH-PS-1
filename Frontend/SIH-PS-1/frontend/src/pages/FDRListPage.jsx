@@ -68,24 +68,24 @@ export function FDRListPage() {
           fdrStatus === statusFilter ||
           (statusFilter === 'VERIFIED' && fdrStatus === 'ACTIVE')
 
-        // Maturity Filter
+        // Maturity Filter (Non-overlapping smart brackets)
         let matchesMaturity = true
         const daysLeft = getDaysRemaining(fdr.maturityDate)
 
-        if (maturityFilter === 'MATURING_SOON') {
-          matchesMaturity =
-            fdr.status !== 'Matured' &&
-            fdr.status !== 'Released' &&
-            fdr.status !== 'Rejected' &&
-            daysLeft >= 0 &&
-            daysLeft <= 30
-        } else if (maturityFilter === 'OVERDUE') {
-          matchesMaturity =
-            fdr.status !== 'Released' &&
-            fdr.status !== 'Rejected' &&
-            daysLeft < 0
-        } else if (maturityFilter === 'FUTURE') {
-          matchesMaturity = daysLeft > 30
+        if (maturityFilter === '90D') {
+          matchesMaturity = daysLeft > 60 && daysLeft <= 90
+        } else if (maturityFilter === '60D') {
+          matchesMaturity = daysLeft > 30 && daysLeft <= 60
+        } else if (maturityFilter === '30D') {
+          matchesMaturity = daysLeft > 7 && daysLeft <= 30
+        } else if (maturityFilter === '7D') {
+          matchesMaturity = daysLeft >= 0 && daysLeft <= 7
+        } else if (maturityFilter === 'MATURED') {
+          matchesMaturity = daysLeft >= -30 && daysLeft < 0
+        } else if (maturityFilter === 'OVERDUE_ACTION') {
+          matchesMaturity = daysLeft < -30
+        } else if (maturityFilter === 'ACTIVE') {
+          matchesMaturity = daysLeft > 90
         }
 
         return matchesSearch && matchesStatus && matchesMaturity
@@ -136,6 +136,9 @@ export function FDRListPage() {
       const params = {}
       if (statusFilter !== 'ALL') {
         params.scrutiny_status = statusFilter
+      }
+      if (maturityFilter !== 'ALL') {
+        params.maturity_bracket = maturityFilter
       }
       if (searchQuery.trim()) {
         params.search = searchQuery.trim()
@@ -243,10 +246,14 @@ export function FDRListPage() {
               }}
               className="w-full pl-8 pr-7 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
-              <option value="ALL">All Maturity Timelines</option>
-              <option value="MATURING_SOON">Maturing Soon (Next 30 Days)</option>
-              <option value="FUTURE">Active / Long Term (&gt; 30 Days)</option>
-              <option value="OVERDUE">Overdue / Past Maturity</option>
+              <option value="ALL">All Maturity Horizons</option>
+              <option value="90D">Expiring in 61–90 Days</option>
+              <option value="60D">Expiring in 31–60 Days</option>
+              <option value="30D">Expiring in 8–30 Days</option>
+              <option value="7D">Critical (≤7 Days Left)</option>
+              <option value="MATURED">Matured (0–30 Days Grace)</option>
+              <option value="OVERDUE_ACTION">Overdue Action (&gt;30d Past)</option>
+              <option value="ACTIVE">Active (&gt;90 Days Remaining)</option>
             </select>
             <Calendar className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>

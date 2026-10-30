@@ -1,6 +1,9 @@
 from flask import Blueprint, current_app, g, jsonify, request
-from app.models.enums import ScrutinyStatus
-from app.security import login_required
+from app.models.enums import NotificationType, ScrutinyStatus, UserRole
+from app.models.audit import AuditLog
+from app.models.notification import Notification
+from app.extensions import db
+from app.security import login_required, roles_required
 from app.services.document_service import (
     get_fdr_documents,
     get_single_document,
@@ -16,6 +19,7 @@ from app.services.fdr_service import (
     get_authorized_fdr,
     list_authorized_fdrs,
     update_fdr_record,
+    check_fdr_duplicates,
 )
 from app.services.workflow_service import (
     get_available_workflow_actions,
@@ -306,6 +310,91 @@ def download_fdr_document(fdr_id: int, document_id: int):
     )
 
 
+
+
+@fdr_bp.route("/check-duplicate", methods=["POST"])
+@login_required
+def check_duplicate():
+    """Check for identical or normalized FDR number intra- and cross-institution."""
+    data = request.get_json(silent=True) or {}
+    fdr_number = str(data.get("fdr_number", "")).strip()
+    institution_id = data.get("institution_id")
+
+    user_category = UserRole.normalize_category(g.current_user.role)
+    if user_category == "INSTITUTION":
+        institution_id = g.current_user.institution_id
+    elif not institution_id:
+        institution_id = g.current_user.institution_id or 1
+
+    result = check_fdr_duplicates(fdr_number, institution_id, g.current_user)
+    return jsonify({"success": True, **result}), 200
+
+
+@fdr_bp.route("/<int:fdr_id>/documents/<int:document_id>/verify", methods=["POST"])
+@roles_required(UserRole.AICTE_OFFICER, UserRole.ADMIN)
+def verify_document_decision(fdr_id: int, document_id: int):
+    """AICTE Officer records verification decision on an attached document (VERIFIED, REQUIRES_CORRECTION, REJECTED)."""
+    data = request.get_json(silent=True) or {}
+    decision = str(data.get("decision", "VERIFIED")).strip().upper()
+    remarks = str(data.get("remarks", "")).strip()
+
+    valid_decisions = {"VERIFIED", "REQUIRES_CORRECTION", "REJECTED"}
+    if decision not in valid_decisions:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": f"Invalid decision '{decision}'. Must be one of: {sorted(list(valid_decisions))}",
+                    "code": "INVALID_DECISION",
+                }
+            ),
+            400,
+        )
+
+    upload_dir = current_app.config["UPLOAD_FOLDER"]
+    doc, _ = get_single_document(fdr_id, document_id, g.current_user, upload_dir)
+    fdr = get_authorized_fdr(fdr_id, g.current_user)
+
+    # Record audit log
+    audit = AuditLog(
+        user_id=g.current_user.id,
+        action=f"DOCUMENT_DECISION_{decision}",
+        entity_type="Document",
+        entity_id=doc.id,
+        details=f"Officer {g.current_user.email} marked document '{doc.original_filename}' as {decision}. Remarks: {remarks}",
+    )
+    db.session.add(audit)
+
+    # Notify institution user
+    notif_type = NotificationType.INFO
+    if decision == "REQUIRES_CORRECTION":
+        notif_type = NotificationType.ACTION_REQUIRED
+    elif decision == "REJECTED":
+        notif_type = NotificationType.ALERT
+
+    notif = Notification(
+        user_id=fdr.created_by,
+        title=f"Document Review: {decision} ({fdr.fdr_number})",
+        message=f"Document '{doc.original_filename}' for FDR {fdr.fdr_number} review outcome: {decision}. {f'Remarks: {remarks}' if remarks else ''}".strip(),
+        notification_type=notif_type.value,
+        is_read=False,
+    )
+    db.session.add(notif)
+    db.session.commit()
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": f"Document decision '{decision}' recorded successfully.",
+                "decision": decision,
+                "remarks": remarks,
+                "document": doc.to_dict(),
+            }
+        ),
+        200,
+    )
+
 # ---------------------------------------------------------
 # FDR Scrutiny Workflow Endpoints (Step 7B)
 # ---------------------------------------------------------
@@ -469,8 +558,8 @@ def get_fdr_workflow(fdr_id: int):
     fdr = get_authorized_fdr(fdr_id, g.current_user)
     available_actions = get_available_workflow_actions(fdr, g.current_user)
 
-    page = request.args.get("page")
-    per_page = request.args.get("per_page")
+    page = request.args.get("page", type=int)
+    per_page = request.args.get("per_page", type=int)
 
     history, pagination, deficiencies = get_fdr_workflow_history(
         fdr, g.current_user, page=page, per_page=per_page
@@ -498,3 +587,53 @@ def get_fdr_workflow(fdr_id: int):
         ),
         200,
     )
+
+
+@fdr_bp.route("/<int:fdr_id>/bank-verify", methods=["POST"])
+@login_required
+def fdr_bank_verify_alias(fdr_id: int):
+    """Alias for POST /api/bank/verify-fdr/<id>."""
+    from app.routes.bank import verify_fdr_endpoint
+    return verify_fdr_endpoint(fdr_id)
+
+
+@fdr_bp.route("/<int:fdr_id>/demo-renewal-receipt", methods=["GET"])
+@login_required
+def download_demo_renewal_receipt(fdr_id: int):
+    """
+    Download a synthetic PDF renewal receipt for local testing and demonstration.
+    Strictly forbidden in production environments.
+    """
+    from flask import send_file
+    import io
+    from app.services.synthetic_receipt_service import (
+        is_demo_environment,
+        generate_synthetic_renewal_receipt,
+    )
+    if not is_demo_environment():
+        return (
+            jsonify(
+                {
+                    "error": "Synthetic demo receipts are disabled in production mode.",
+                    "code": "DEMO_DISABLED",
+                }
+            ),
+            403,
+        )
+
+    fdr = get_authorized_fdr(fdr_id, g.current_user)
+
+    new_fdr_num = request.args.get("new_fdr_number")
+    pdf_bytes = generate_synthetic_renewal_receipt(
+        fdr=fdr,
+        new_fdr_number=new_fdr_num,
+    )
+
+    clean_num = "".join(c for c in fdr.fdr_number if c.isalnum() or c in "-_") or "fdr"
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"DEMO_Renewal_Receipt_{clean_num}.pdf",
+    )
+

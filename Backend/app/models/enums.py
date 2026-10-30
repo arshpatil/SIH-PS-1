@@ -21,6 +21,8 @@ class ValidityStatus(str, Enum):
     EXPIRING_SOON = "EXPIRING_SOON"
     MATURED = "MATURED"
     OVERDUE_ACTION = "OVERDUE_ACTION"
+    RENEWAL_PENDING_VERIFICATION = "RENEWAL_PENDING_VERIFICATION"
+    RENEWED = "RENEWED"
 
     @classmethod
     def values(cls) -> set[str]:

@@ -5,6 +5,14 @@ export const authService = {
    * Authenticate with email & password.
    * On success, backend sets HttpOnly session cookie and returns { user, csrf_token }.
    */
+  /**
+   * Public registration for a new institution and principal account.
+   */
+  async register(payload) {
+    const response = await apiClient.post('/auth/register', payload)
+    return response.data
+  },
+
   async login(email, password) {
     // Obtain initial CSRF token for the login session if needed
     await getCsrfToken()

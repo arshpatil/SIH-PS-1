@@ -28,7 +28,7 @@ def run_workflow_history_migration(app: Flask | None = None, backfill: bool = Tr
     table_already_existed = "fdr_workflow_history" in existing_tables
 
     # 1. Safely create table and indexes if not present
-    FDRWorkflowHistory.__table__.create(engine, checkfirst=True)
+    db.metadata.tables["fdr_workflow_history"].create(engine, checkfirst=True)
 
     backfilled_count = 0
     skipped_count = 0
@@ -124,3 +124,63 @@ def run_workflow_history_migration(app: Flask | None = None, backfill: bool = Tr
         "skipped_count": skipped_count,
         "message": msg,
     }
+
+
+def ensure_schema_updates(engine=None) -> list[str]:
+    """
+    Safely verify and apply incremental schema updates (such as new columns and tables)
+    to existing databases without dropping or altering existing data.
+    """
+    if engine is None:
+        engine = db.engine
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    created = []
+
+    from app.models.renewal_history import FDRRenewalHistory
+    from app.models.bank_verification import BankVerificationLog
+    from app.models.email_log import EmailNotificationLog
+
+    # Safely create fdr_renewal_history table if absent
+    if "fdr_renewal_history" not in existing_tables:
+        FDRRenewalHistory.__table__.create(engine, checkfirst=True)
+        created.append("fdr_renewal_history")
+        logger.info("Migrated schema: created fdr_renewal_history table")
+
+    # Safely create bank_verification_logs table if absent
+    if "bank_verification_logs" not in existing_tables:
+        BankVerificationLog.__table__.create(engine, checkfirst=True)
+        created.append("bank_verification_logs")
+        logger.info("Migrated schema: created bank_verification_logs table")
+
+    # Safely create email_notification_logs table if absent
+    if "email_notification_logs" not in existing_tables:
+        EmailNotificationLog.__table__.create(engine, checkfirst=True)
+        created.append("email_notification_logs")
+        logger.info("Migrated schema: created email_notification_logs table")
+
+    if "fdr_requests" in existing_tables:
+        columns = [c["name"] for c in inspector.get_columns("fdr_requests")]
+        new_cols = [
+            ("assigned_to", "INTEGER"),
+            ("renewal_fdr_number", "VARCHAR(100)"),
+            ("renewal_issue_date", "DATE"),
+            ("renewal_maturity_date", "DATE"),
+            ("renewal_amount", "NUMERIC(15, 2)"),
+            ("renewal_document", "VARCHAR(255)"),
+            ("renewal_document_size", "INTEGER"),
+            ("renewal_remarks", "TEXT"),
+            ("renewal_submitted_at", "TIMESTAMP"),
+            ("renewal_verified_at", "TIMESTAMP"),
+            ("renewal_verified_by", "INTEGER"),
+            ("renewal_is_synthetic", "BOOLEAN DEFAULT 0"),
+            ("renewal_ocr_data", "TEXT"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_cols:
+                if col_name not in columns:
+                    conn.execute(db.text(f"ALTER TABLE fdr_requests ADD COLUMN {col_name} {col_type}"))
+                    logger.info(f"Migrated fdr_requests table: added column {col_name}")
+            conn.commit()
+
+    return created

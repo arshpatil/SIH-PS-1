@@ -7,9 +7,11 @@ import { FDRListPage } from './pages/FDRListPage'
 import { FDRDetailPage } from './pages/FDRDetailPage'
 import { UploadFDRPage } from './pages/UploadFDRPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { CalendarPage } from './pages/CalendarPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 export default function App() {
@@ -19,6 +21,7 @@ export default function App() {
         <Routes>
           {/* Public Demo Login Route */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           {/* Protected Dashboard Routes */}
           <Route path="/" element={<DashboardLayout />}>
@@ -27,6 +30,7 @@ export default function App() {
             <Route path="fdrs/:id" element={<FDRDetailPage />} />
             <Route path="upload" element={<UploadFDRPage />} />
             <Route path="requests" element={<RequestsPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="*" element={<NotFoundPage />} />

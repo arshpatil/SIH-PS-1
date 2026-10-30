@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import or_
@@ -75,7 +76,7 @@ def parse_strict_date(value: str | date, field_name: str) -> date:
         raise ValueError(f"'{field_name}' must be formatted as YYYY-MM-DD.")
 
 
-def parse_positive_amount(value: any) -> Decimal:
+def parse_positive_amount(value: Any) -> Decimal:
     """Parse and validate monetary amount as a finite, positive Decimal."""
     if isinstance(value, bool):
         raise ValueError("Amount must be a numeric value, not a boolean.")
@@ -236,19 +237,65 @@ def validate_create_payload(data: dict, current_user: User) -> dict:
     }
 
 
+
+def normalize_fdr_number(number: str) -> str:
+    """Normalize FDR number by stripping non-alphanumeric characters and converting to uppercase."""
+    if not number:
+        return ""
+    import re
+    return re.sub(r"[^A-Za-z0-9]", "", str(number)).upper()
+
+
+def check_fdr_duplicates(fdr_number: str, institution_id: int, current_user: User) -> dict:
+    """Check for identical or normalized FDR number intra- and cross-institution."""
+    clean_raw = str(fdr_number).strip()
+    normalized = normalize_fdr_number(clean_raw)
+    if not normalized:
+        return {"is_duplicate": False, "scope": None, "message": "Valid FDR number required."}
+
+    user_category = UserRole.normalize_category(current_user.role)
+
+    # 1. Intra-institution exact or normalized match
+    inst_records = FDRRecord.query.filter_by(institution_id=institution_id).all()
+    for rec in inst_records:
+        if rec.fdr_number.strip().upper() == clean_raw.upper() or normalize_fdr_number(rec.fdr_number) == normalized:
+            return {
+                "is_duplicate": True,
+                "scope": "INTERNAL",
+                "message": f"An FDR with this number ('{rec.fdr_number}') already exists in this institution.",
+                "fdr_id": rec.id,
+            }
+
+    # 2. Cross-institution match
+    all_other_records = FDRRecord.query.filter(FDRRecord.institution_id != institution_id).all()
+    for rec in all_other_records:
+        if normalize_fdr_number(rec.fdr_number) == normalized:
+            if user_category == "INSTITUTION":
+                return {
+                    "is_duplicate": True,
+                    "scope": "CROSS_INSTITUTION",
+                    "message": "A security deposit with this receipt reference is already registered in the AICTE portal. Please verify the receipt details or contact AICTE support.",
+                }
+            else:
+                return {
+                    "is_duplicate": True,
+                    "scope": "CROSS_INSTITUTION",
+                    "message": f"Matching FDR reference registered under {rec.institution.name if rec.institution else 'another institution'} (Code: {rec.institution.institution_code if rec.institution else ''}).",
+                    "fdr_id": rec.id,
+                    "institution_id": rec.institution_id,
+                    "institution_name": rec.institution.name if rec.institution else None,
+                }
+
+    return {"is_duplicate": False, "scope": None, "message": "No duplicate FDR reference found."}
+
 def create_fdr_record(data: dict, current_user: User) -> FDRRecord:
     """Create a new FDR record after validating inputs and enforcing uniqueness."""
     validated = validate_create_payload(data, current_user)
 
-    # Check for duplicate FDR number within the target institution
-    existing = FDRRecord.query.filter_by(
-        institution_id=validated["institution_id"],
-        fdr_number=validated["fdr_number"],
-    ).first()
-    if existing:
-        raise FDRDuplicateError(
-            f"FDR number '{validated['fdr_number']}' already exists for institution ID {validated['institution_id']}."
-        )
+    # Enhanced intra-institution duplicate check with normalization (enforces uq_institution_fdr_number)
+    dup_res = check_fdr_duplicates(validated["fdr_number"], validated["institution_id"], current_user)
+    if dup_res["is_duplicate"] and dup_res["scope"] == "INTERNAL":
+        raise FDRDuplicateError(dup_res["message"])
 
     fdr = FDRRecord(**validated)
     db.session.add(fdr)
@@ -332,6 +379,28 @@ def list_authorized_fdrs(current_user: User, filters: dict) -> tuple[list[FDRRec
                 }
             )
         query = query.filter(FDRRecord.validity_status == val)
+
+    # 4b. Filter by precise maturity brackets
+    mat_bracket = filters.get("maturity_bracket") or filters.get("maturity_filter")
+    if mat_bracket and str(mat_bracket).strip().upper() != "ALL":
+        from datetime import timedelta
+        from app.services.maturity_service import get_business_date
+        ref_d = get_business_date()
+        mb = str(mat_bracket).strip().upper()
+        if mb in ("MATURING_90", "MATURING_90_DAYS", "90D"):
+            query = query.filter(FDRRecord.maturity_date > ref_d + timedelta(days=60), FDRRecord.maturity_date <= ref_d + timedelta(days=90))
+        elif mb in ("MATURING_60", "MATURING_60_DAYS", "60D"):
+            query = query.filter(FDRRecord.maturity_date > ref_d + timedelta(days=30), FDRRecord.maturity_date <= ref_d + timedelta(days=60))
+        elif mb in ("MATURING_30", "MATURING_30_DAYS", "MATURING_SOON", "30D"):
+            query = query.filter(FDRRecord.maturity_date > ref_d + timedelta(days=7), FDRRecord.maturity_date <= ref_d + timedelta(days=30))
+        elif mb in ("MATURING_7", "MATURING_7_DAYS", "7D"):
+            query = query.filter(FDRRecord.maturity_date >= ref_d, FDRRecord.maturity_date <= ref_d + timedelta(days=7))
+        elif mb == "MATURED":
+            query = query.filter(FDRRecord.maturity_date >= ref_d - timedelta(days=30), FDRRecord.maturity_date < ref_d)
+        elif mb in ("OVERDUE", "OVERDUE_ACTION"):
+            query = query.filter(FDRRecord.maturity_date < ref_d - timedelta(days=30))
+        elif mb in ("ACTIVE", "FUTURE"):
+            query = query.filter(FDRRecord.maturity_date > ref_d + timedelta(days=90))
 
     # 5. Filter by maturity range
     maturity_from = filters.get("maturity_from")

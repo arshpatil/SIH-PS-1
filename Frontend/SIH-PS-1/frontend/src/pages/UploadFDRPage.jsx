@@ -12,6 +12,8 @@ import {
   RotateCcw,
   FileCheck,
   Info,
+  ShieldCheck,
+  Building,
 } from 'lucide-react'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -149,63 +151,63 @@ export function UploadFDRPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
       {/* Page Title */}
       <div>
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-          Submit Fixed Deposit Receipt (FDR)
+          Register & Deposit Fixed Deposit Receipt (FDR)
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Upload and register institutional security deposit receipts with AICTE joint lien endorsement.
+          Lodge statutory institutional security deposit receipts with mandatory AICTE joint lien endorsement.
         </p>
       </div>
 
       {/* Stepper Header */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
+      <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-card">
+        <div className="flex items-center justify-between max-w-md mx-auto">
           {/* Step 1 */}
           <div className="flex items-center gap-2">
             <span
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                step >= 1 ? 'bg-[#142B4A] text-white' : 'bg-slate-200 text-slate-600'
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                step >= 1 ? 'bg-[#142B4A] text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}
             >
               1
             </span>
-            <span className={`text-xs font-medium ${step >= 1 ? 'text-slate-900' : 'text-slate-600'}`}>
-              Enter Details
+            <span className={`text-xs font-semibold ${step >= 1 ? 'text-slate-900' : 'text-slate-500'}`}>
+              Deposit Details
             </span>
           </div>
 
-          <div className={`h-0.5 w-12 sm:w-20 ${step >= 2 ? 'bg-[#142B4A]' : 'bg-slate-200'}`} />
+          <div className={`h-0.5 w-10 sm:w-16 transition-colors ${step >= 2 ? 'bg-[#142B4A]' : 'bg-slate-200'}`} />
 
           {/* Step 2 */}
           <div className="flex items-center gap-2">
             <span
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                step >= 2 ? 'bg-[#142B4A] text-white' : 'bg-slate-200 text-slate-600'
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                step >= 2 ? 'bg-[#142B4A] text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}
             >
               2
             </span>
-            <span className={`text-xs font-medium ${step >= 2 ? 'text-slate-900' : 'text-slate-600'}`}>
-              Review
+            <span className={`text-xs font-semibold ${step >= 2 ? 'text-slate-900' : 'text-slate-500'}`}>
+              Review & Verification
             </span>
           </div>
 
-          <div className={`h-0.5 w-12 sm:w-20 ${step >= 3 ? 'bg-[#142B4A]' : 'bg-slate-200'}`} />
+          <div className={`h-0.5 w-10 sm:w-16 transition-colors ${step >= 3 ? 'bg-[#142B4A]' : 'bg-slate-200'}`} />
 
           {/* Step 3 */}
           <div className="flex items-center gap-2">
             <span
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                step === 3 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                step === 3 ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}
             >
               3
             </span>
-            <span className={`text-xs font-medium ${step === 3 ? 'text-slate-900' : 'text-slate-600'}`}>
-              Completed
+            <span className={`text-xs font-semibold ${step === 3 ? 'text-slate-900' : 'text-slate-500'}`}>
+              Lien Endorsed
             </span>
           </div>
         </div>
@@ -213,18 +215,19 @@ export function UploadFDRPage() {
 
       {/* STEP 1: FORM INPUT */}
       {step === 1 && (
-        <form onSubmit={handleSubmit(onProceedToReview, onInvalid)} className="space-y-6">
-          <Card>
+        <form onSubmit={handleSubmit(onProceedToReview, onInvalid)} className="space-y-5">
+          <Card className="p-4 sm:p-6">
             <CardHeader
               title="Fixed Deposit Receipt Details"
-              subtitle="All fields marked with an asterisk (*) are mandatory under AICTE norms"
+              subtitle="All fields marked with an asterisk (*) are statutory requirements under AICTE regulations"
+              icon={Building}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {/* FDR Number */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Input
-                  label="FDR Reference / Receipt Number"
+                  label="FDR Reference / Certificate Number"
                   placeholder="e.g. FDR-SBI-2026-90812"
                   required
                   error={errors.fdrNumber?.message}
@@ -234,14 +237,14 @@ export function UploadFDRPage() {
                 />
                 {dupChecking && (
                   <p className="text-2xs text-slate-500 italic">
-                    Verifying FDR receipt uniqueness in AICTE national repository...
+                    Verifying receipt uniqueness in AICTE central database...
                   </p>
                 )}
                 {dupWarning && dupWarning.scope === 'INTERNAL' && (
                   <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Internal Duplicate Warning:</strong> A Fixed Deposit Receipt with this reference number is already registered under your institution (ID #{dupWarning.existing_id}).
+                      <strong>Internal Duplicate:</strong> An FDR with this reference number is already registered under your college (Record #{dupWarning.existing_id}).
                     </span>
                   </div>
                 )}
@@ -249,7 +252,7 @@ export function UploadFDRPage() {
                   <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Registry Notice:</strong> An identical receipt identifier was previously indexed for another institution. Please re-check physical certificate details.
+                      <strong>Registry Alert:</strong> An identical receipt identifier was previously indexed for another institution. Please verify physical receipt details.
                     </span>
                   </div>
                 )}
@@ -262,7 +265,7 @@ export function UploadFDRPage() {
                 error={errors.bankName?.message}
                 {...register('bankName')}
               >
-                <option value="">Select a Scheduled Bank...</option>
+                <option value="">Select a Scheduled Commercial Bank...</option>
                 {SCHEDULED_BANKS.map((b) => (
                   <option key={b} value={b}>
                     {b}
@@ -281,12 +284,12 @@ export function UploadFDRPage() {
 
               {/* Deposit Amount */}
               <Input
-                label="Deposit Amount (INR ₹)"
+                label="Principal Deposit Amount (INR ₹)"
                 type="number"
                 placeholder="e.g. 2500000"
                 required
                 error={errors.depositAmount?.message}
-                helperText="Minimum deposit required is ₹ 10,000"
+                helperText="Minimum security deposit required is ₹ 10,000"
                 {...register('depositAmount')}
               />
 
@@ -320,8 +323,8 @@ export function UploadFDRPage() {
               {/* Remarks */}
               <div className="md:col-span-2">
                 <Input
-                  label="Remarks / Institutional Purpose"
-                  placeholder="e.g. Security deposit for introduction of new MCA programme approved in 2026"
+                  label="Statutory Purpose / Approval Remarks"
+                  placeholder="e.g. Security deposit for introduction of new MCA programme approved for academic session 2026-27"
                   error={errors.remarks?.message}
                   {...register('remarks')}
                 />
@@ -330,14 +333,15 @@ export function UploadFDRPage() {
           </Card>
 
           {/* Document Upload Section */}
-          <Card>
+          <Card className="p-4 sm:p-6">
             <CardHeader
-              title="FDR Document Attachment"
-              subtitle="Upload scanned copy of the fixed deposit receipt bearing joint lien with AICTE"
+              title="FDR Supporting Document"
+              subtitle="Upload scanned or digital copy of the fixed deposit receipt bearing AICTE joint lien endorsement"
+              icon={UploadCloud}
             />
 
-            <div className="space-y-4">
-              <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:bg-slate-50/50 transition-colors">
+            <div className="space-y-3.5">
+              <div className="border-2 border-dashed border-slate-300 hover:border-navy-600 rounded-xl p-6 text-center hover:bg-slate-50/50 transition-all cursor-pointer">
                 <input
                   type="file"
                   id="fdrDocumentFile"
@@ -349,14 +353,14 @@ export function UploadFDRPage() {
                   htmlFor="fdrDocumentFile"
                   className="cursor-pointer flex flex-col items-center justify-center"
                 >
-                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 mb-3">
-                    <UploadCloud className="w-6 h-6 text-[#142B4A]" />
+                  <div className="w-11 h-11 rounded-xl bg-navy-50 flex items-center justify-center text-navy-700 mb-2.5">
+                    <UploadCloud className="w-5 h-5 text-navy-700" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Click to select file or drag and drop
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800">
+                    Click to select file or drag and drop receipt
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Accepted formats: PDF, PNG, JPEG (Max file size: 10 MB)
+                  <p className="text-2xs sm:text-xs text-slate-500 mt-1">
+                    Accepted formats: PDF, PNG, JPG, JPEG (Max file size: 10 MB)
                   </p>
                 </label>
               </div>
@@ -369,9 +373,9 @@ export function UploadFDRPage() {
               )}
 
               {selectedFile && (
-                <div className="flex items-center justify-between p-3.5 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
                   <div className="flex items-center gap-3 truncate">
-                    <FileText className="w-5 h-5 text-[#142B4A] shrink-0" />
+                    <FileText className="w-5 h-5 text-navy-700 shrink-0" />
                     <div className="truncate">
                       <p className="text-xs font-semibold text-slate-900 truncate">
                         {selectedFile.name}
@@ -381,8 +385,8 @@ export function UploadFDRPage() {
                       </p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                    Ready
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                    Ready to Upload
                   </span>
                 </div>
               )}
@@ -390,7 +394,7 @@ export function UploadFDRPage() {
           </Card>
 
           {/* Form Actions */}
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-1">
             <Button
               variant="secondary"
               icon={RotateCcw}
@@ -403,6 +407,7 @@ export function UploadFDRPage() {
               type="submit"
               variant="primary"
               icon={ArrowRight}
+              iconPosition="right"
             >
               Proceed to Review
             </Button>
@@ -414,118 +419,122 @@ export function UploadFDRPage() {
       {step === 2 && (() => {
         const reviewData = validatedData || getValues()
         return (
-        <Card className="space-y-6">
-          <CardHeader
-            title="Review FDR Submission Before Submission"
-            subtitle="Please verify the accuracy of the entered fixed deposit details before lodging"
-          />
+          <Card className="p-4 sm:p-6 space-y-5">
+            <CardHeader
+              title="Review FDR Submission Before Lodging"
+              subtitle="Please verify the accuracy of the entered fixed deposit details before official submission"
+              icon={ShieldCheck}
+            />
 
-          <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Important Institutional Notice:</p>
-              <p className="mt-0.5">
-                Submissions are logged into the institutional state with initial status <strong>"Pending Verification"</strong>. Simulated actions in this portal do not constitute official AICTE approval.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-            {/* Column 1 */}
-            <div className="space-y-3.5 pr-0 sm:pr-4">
+            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">FDR Reference #</span>
-                <p className="font-mono font-bold text-slate-900 mt-0.5">{reviewData.fdrNumber}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Issuing Bank</span>
-                <p className="font-medium text-slate-800 mt-0.5">{reviewData.bankName}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Branch Details</span>
-                <p className="text-slate-700 mt-0.5">{reviewData.branchName || 'Standard Institutional Branch'}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Deposit Amount</span>
-                <p className="text-lg font-bold text-slate-900 mt-0.5">{formatCurrency(reviewData.depositAmount)}</p>
-              </div>
-            </div>
-
-            {/* Column 2 */}
-            <div className="space-y-3.5 pt-4 sm:pt-0 sm:pl-4">
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Issue Date</span>
-                <p className="font-medium text-slate-800 mt-0.5">{formatDate(reviewData.issueDate)}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Maturity Date</span>
-                <p className="font-medium text-slate-800 mt-0.5">{formatDate(reviewData.maturityDate)}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Interest Rate</span>
-                <p className="font-medium text-slate-800 mt-0.5">{reviewData.interestRate || '7.10% p.a.'}</p>
-              </div>
-
-              <div>
-                <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Attached File</span>
-                <p className="text-xs text-slate-800 font-medium truncate mt-0.5">
-                  {selectedFile?.name} ({formatFileSize(selectedFile?.size)})
+                <p className="font-bold">Statutory Compliance Notice:</p>
+                <p className="mt-0.5 text-2xs leading-relaxed text-amber-800">
+                  Submissions are lodged with an initial status of <strong>Pending Verification</strong>. Fixed deposit receipts must carry an unencumbered joint lien in favor of the Member Secretary, AICTE New Delhi.
                 </p>
               </div>
             </div>
-          </div>
 
-          {reviewData.remarks && (
-            <div className="pt-3 border-t border-slate-100">
-              <span className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">Remarks / Purpose</span>
-              <p className="text-xs text-slate-700 mt-1">{reviewData.remarks}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+              {/* Column 1 */}
+              <div className="space-y-3 pr-0 sm:pr-4">
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">FDR Reference #</span>
+                  <p className="font-mono font-bold text-slate-900 mt-0.5 text-sm">{reviewData.fdrNumber}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Issuing Bank</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{reviewData.bankName}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Branch Details</span>
+                  <p className="text-slate-700 mt-0.5">{reviewData.branchName || 'Standard Institutional Branch'}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Deposit Amount</span>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 mt-0.5 tabular-nums">
+                    {formatCurrency(reviewData.depositAmount)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Column 2 */}
+              <div className="space-y-3 pt-3 sm:pt-0 sm:pl-4">
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Issue Date</span>
+                  <p className="font-medium text-slate-800 mt-0.5 tabular-nums">{formatDate(reviewData.issueDate)}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Maturity Date</span>
+                  <p className="font-medium text-slate-800 mt-0.5 tabular-nums">{formatDate(reviewData.maturityDate)}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Interest Rate</span>
+                  <p className="font-medium text-slate-800 mt-0.5">{reviewData.interestRate || '7.10% p.a.'}</p>
+                </div>
+
+                <div>
+                  <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Attached File</span>
+                  <p className="text-xs text-slate-800 font-medium truncate mt-0.5">
+                    {selectedFile?.name} ({formatFileSize(selectedFile?.size)})
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
 
-          {/* Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-            <Button
-              variant="secondary"
-              icon={ArrowLeft}
-              onClick={() => setStep(1)}
-              disabled={isSubmitting}
-            >
-              Back to Edit
-            </Button>
+            {reviewData.remarks && (
+              <div className="pt-3 border-t border-slate-100">
+                <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Remarks / Purpose</span>
+                <p className="text-xs text-slate-700 mt-1 leading-relaxed">{reviewData.remarks}</p>
+              </div>
+            )}
 
-            <Button
-              variant="primary"
-              icon={FileCheck}
-              loading={isSubmitting}
-              onClick={onFinalSubmit}
-            >
-              Confirm & Submit FDR
-            </Button>
-          </div>
-        </Card>
-      )})()}
+            {/* Buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <Button
+                variant="secondary"
+                icon={ArrowLeft}
+                onClick={() => setStep(1)}
+                disabled={isSubmitting}
+              >
+                Back to Edit
+              </Button>
+
+              <Button
+                variant="primary"
+                icon={FileCheck}
+                loading={isSubmitting}
+                onClick={onFinalSubmit}
+              >
+                Confirm & Submit FDR
+              </Button>
+            </div>
+          </Card>
+        )
+      })()}
 
       {/* STEP 3: SUCCESS STATE */}
       {step === 3 && (
-        <Card className="p-8 text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-            <CheckCircle className="w-10 h-10" />
+        <Card className="p-6 sm:p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
+            <CheckCircle className="w-8 h-8" />
           </div>
 
-          <h3 className="text-xl font-bold text-slate-900">
+          <h3 className="text-lg sm:text-xl font-bold text-slate-900">
             FDR Registered Successfully!
           </h3>
 
-          <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-            Receipt <span className="font-mono font-bold text-slate-900">{formValues.fdrNumber}</span> has been logged into the college dashboard under <strong>Pending Verification</strong> status.
+          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+            Receipt <span className="font-mono font-bold text-slate-900">{validatedData?.fdrNumber || getValues('fdrNumber')}</span> has been lodged into the portal under <strong>Pending Verification</strong> status for scrutiny by AICTE officers.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-3">
             {submittedFdrId && (
               <Button
                 variant="primary"
@@ -546,7 +555,7 @@ export function UploadFDRPage() {
               variant="outline"
               onClick={handleResetForm}
             >
-              Upload Another FDR
+              Deposit Another FDR
             </Button>
           </div>
         </Card>
@@ -554,3 +563,5 @@ export function UploadFDRPage() {
     </div>
   )
 }
+
+export default UploadFDRPage

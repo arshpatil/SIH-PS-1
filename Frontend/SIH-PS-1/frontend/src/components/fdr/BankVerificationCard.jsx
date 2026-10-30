@@ -105,12 +105,12 @@ export function BankVerificationCard({ fdr, onVerified }) {
   const isDemo = providerInfo?.is_demo ?? true
 
   return (
-    <Card className="border-indigo-100 shadow-sm overflow-hidden">
+    <Card className="border-slate-200 shadow-sm overflow-hidden">
       {/* Header Banner */}
-      <CardHeader className="bg-gradient-to-r from-slate-900 via-[#142B4A] to-slate-900 text-white p-4 sm:p-5">
+      <CardHeader className="bg-[#0B1B3D] border-b border-[#142B4A] text-white p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-white/10 text-amber-300 border border-white/10 shrink-0">
+            <div className="p-2 rounded-lg bg-white/10 text-amber-300 border border-white/10 shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
             <div>

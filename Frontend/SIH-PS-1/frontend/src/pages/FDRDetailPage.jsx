@@ -29,6 +29,17 @@ import { fdrService } from '../services/fdrService'
 import { requestService } from '../services/requestService'
 import { BankVerificationCard } from '../components/fdr/BankVerificationCard'
 
+const SYNTHETIC_SCENARIO_OPTIONS = [
+  { id: 'MATCHING_FDR', label: '1. Perfect Match (All 6 Fields)', badge: 'MATCH', color: 'emerald' },
+  { id: 'MATURITY_DATE_MISMATCH', label: '2. Maturity Date Mismatch (+1 yr)', badge: 'DISCREPANCY', color: 'rose' },
+  { id: 'AMOUNT_MISMATCH', label: '3. Principal Amount Mismatch (+5L)', badge: 'DISCREPANCY', color: 'rose' },
+  { id: 'FDR_NUMBER_MISMATCH', label: '4. FDR Number Mismatch', badge: 'DISCREPANCY', color: 'rose' },
+  { id: 'MISSING_FIELDS', label: '5. Missing Fields (Manual Review)', badge: 'MANUAL REVIEW', color: 'amber' },
+  { id: 'JOINT_LIEN_DETECTED', label: '6. AICTE Joint Lien Clause Detected', badge: 'LIEN: DETECTED', color: 'emerald' },
+  { id: 'JOINT_LIEN_AMBIGUOUS', label: '7. Ambiguous Joint Lien Clause', badge: 'LIEN: AMBIGUOUS', color: 'amber' },
+  { id: 'JOINT_LIEN_NOT_DETECTED', label: '8. No Joint Lien Endorsement', badge: 'LIEN: NONE', color: 'slate' },
+]
+
 export function FDRDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -47,6 +58,8 @@ export function FDRDetailPage() {
   const [docDecision, setDocDecision] = useState('')
   const [docRemarks, setDocRemarks] = useState('')
   const [docVerifying, setDocVerifying] = useState(false)
+  const [fieldReviewInputs, setFieldReviewInputs] = useState({})
+  const [savingFieldKey, setSavingFieldKey] = useState(null)
 
   // Document upload state
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
@@ -89,6 +102,10 @@ export function FDRDetailPage() {
   const [renewalVerifying, setRenewalVerifying] = useState(false)
   const [isSimulatedVerification, setIsSimulatedVerification] = useState(false)
   const [downloadingDemoReceipt, setDownloadingDemoReceipt] = useState(false)
+  const [selectedScenario, setSelectedScenario] = useState('MATCHING_FDR')
+  const [selectedDocFormat, setSelectedDocFormat] = useState('pdf')
+  const [downloadingSynthetic, setDownloadingSynthetic] = useState(false)
+  const [runningSynthetic, setRunningSynthetic] = useState(false)
   const isDevDemoMode = Boolean(
     import.meta.env.DEV ||
     typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -185,6 +202,22 @@ export function FDRDetailPage() {
     try {
       const detail = await fdrService.getDocumentDetail(id, doc.id)
       setDocDetail(detail)
+      if (detail?.discrepancy_report?.document_review) {
+        setDocDecision(detail.discrepancy_report.document_review.decision || '')
+        setDocRemarks(detail.discrepancy_report.document_review.remarks || '')
+      } else {
+        setDocDecision('')
+        setDocRemarks('')
+      }
+      if (detail?.discrepancy_report?.field_reviews) {
+        const initial = {}
+        Object.entries(detail.discrepancy_report.field_reviews).forEach(([k, v]) => {
+          initial[k] = { decision: v.decision || '', remarks: v.remarks || '' }
+        })
+        setFieldReviewInputs(initial)
+      } else {
+        setFieldReviewInputs({})
+      }
     } catch {
       setDocDetail(null)
     } finally {
@@ -192,8 +225,37 @@ export function FDRDetailPage() {
     }
   }
 
-  // Handle Document Download
-  // Handle Officer Document Verification Decision
+  // Handle Officer Field-level Review Decision
+  const handleSaveFieldReview = async (fieldKey) => {
+    const input = fieldReviewInputs[fieldKey]
+    if (!input || !input.decision) {
+      showToast(`Please select a verification decision for ${fieldKey}.`, 'error')
+      return
+    }
+    setSavingFieldKey(fieldKey)
+    try {
+      const fieldPayload = {
+        [fieldKey]: {
+          decision: input.decision,
+          remarks: input.remarks || '',
+        },
+      }
+      const res = await fdrService.verifyDocumentDecision(fdr.id, selectedDoc.id, null, '', fieldPayload)
+      showToast(`Field review recorded for ${fieldKey}: ${input.decision}`, 'success')
+      if (res?.discrepancy_report) {
+        setDocDetail((prev) => ({
+          ...prev,
+          discrepancy_report: res.discrepancy_report,
+        }))
+      }
+    } catch (err) {
+      showToast(err.message || `Failed to record review for ${fieldKey}.`, 'error')
+    } finally {
+      setSavingFieldKey(null)
+    }
+  }
+
+  // Handle Officer Overall Document Verification Decision
   const handleVerifyDocDecision = async (e) => {
     e.preventDefault()
     if (!docDecision) {
@@ -206,14 +268,17 @@ export function FDRDetailPage() {
     }
     setDocVerifying(true)
     try {
-      await fdrService.verifyDocumentDecision(fdr.id, selectedDoc.id, docDecision, docRemarks.trim())
+      const res = await fdrService.verifyDocumentDecision(fdr.id, selectedDoc.id, docDecision, docRemarks.trim())
       showToast(`Document decision recorded: ${docDecision}`, 'success')
-      setDocRemarks('')
-      setDocDecision('')
+      if (res?.discrepancy_report) {
+        setDocDetail((prev) => ({
+          ...prev,
+          discrepancy_report: res.discrepancy_report,
+        }))
+      }
       // Refresh documents
       const docs = await fdrService.listFDRDocuments(fdr.id)
       setDocuments(docs)
-      setDocModalOpen(false)
     } catch (err) {
       showToast(err.message || 'Failed to record document decision.', 'error')
     } finally {
@@ -247,6 +312,34 @@ export function FDRDetailPage() {
       showToast(errMsg, 'error')
     } finally {
       setUploadingDoc(false)
+    }
+  }
+
+  const handleDownloadSynthetic = async (scen = selectedScenario, fmt = selectedDocFormat) => {
+    setDownloadingSynthetic(true)
+    try {
+      await fdrService.downloadSyntheticDocument(id, scen, fmt)
+      showToast(`Synthetic test document (${scen}) downloaded!`, 'success')
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to download synthetic document', 'error')
+    } finally {
+      setDownloadingSynthetic(false)
+    }
+  }
+
+  const handleRunSyntheticScenario = async (scen = selectedScenario, fmt = selectedDocFormat) => {
+    setRunningSynthetic(true)
+    try {
+      const res = await fdrService.loadSyntheticDocument(id, scen, fmt)
+      showToast(`Scenario "${scen}" loaded and verified successfully!`, 'success')
+      await loadFDRDetails()
+      if (res?.document) {
+        handleOpenDocModal(res.document)
+      }
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to execute synthetic scenario', 'error')
+    } finally {
+      setRunningSynthetic(false)
     }
   }
 
@@ -1100,10 +1193,121 @@ export function FDRDetailPage() {
 
         {/* Right Column: Attached Documents & OCR Discrepancy Findings */}
         <div className="space-y-6">
+          {/* Dev / Demo Synthetic Document Suite */}
+          {isDevDemoMode && (
+            <Card className="border-indigo-200 bg-linear-to-br from-indigo-50/50 via-white to-purple-50/30 shadow-xs">
+              <CardHeader
+                title="Synthetic FDR Document Suite"
+                subtitle="Local Dev & Demo — Safe Fictional Documents for OCR Verification"
+                action={
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white shadow-2xs">
+                    Dev / Demo Mode
+                  </span>
+                }
+              />
+              <div className="space-y-3.5 text-xs text-slate-700">
+                <p className="text-slate-600 leading-relaxed text-2xs">
+                  Generate compliant fictional FDR documents marked with mandatory testing watermarks to safely test discrepancy detection, field comparison audits, and AICTE joint-lien compliance without real bank credentials.
+                </p>
+
+                <div className="space-y-1.5">
+                  <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wide">
+                    Select Test Scenario:
+                  </label>
+                  <select
+                    value={selectedScenario}
+                    onChange={(e) => setSelectedScenario(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-indigo-200 bg-white font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-400"
+                  >
+                    {SYNTHETIC_SCENARIO_OPTIONS.map((scen) => (
+                      <option key={scen.id} value={scen.id}>
+                        {scen.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wide">
+                    Document Format:
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocFormat('pdf')}
+                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
+                        selectedDocFormat === 'pdf'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Digital PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocFormat('scanned_pdf')}
+                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
+                        selectedDocFormat === 'scanned_pdf'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Scanned PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocFormat('image')}
+                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
+                        selectedDocFormat === 'image'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      PNG Image
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 border-t border-indigo-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={Download}
+                    loading={downloadingSynthetic}
+                    onClick={() => handleDownloadSynthetic()}
+                    className="flex-1 border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 font-semibold"
+                  >
+                    Download Synthetic File
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={ShieldCheck}
+                    loading={runningSynthetic}
+                    onClick={() => handleRunSyntheticScenario()}
+                    className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold"
+                  >
+                    Run Demo OCR Scenario
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           <Card>
             <CardHeader
               title="Attached Documents & OCR"
               subtitle="Files verified with automatic discrepancy detection"
+              action={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  icon={Upload}
+                  onClick={() => setUploadModalOpen(true)}
+                >
+                  Upload Receipt
+                </Button>
+              }
             />
 
             <div className="space-y-3">
@@ -1204,14 +1408,14 @@ export function FDRDetailPage() {
       <Modal
         isOpen={docModalOpen}
         onClose={() => setDocModalOpen(false)}
-        title={`OCR & Discrepancy Report: ${selectedDoc?.original_filename || 'Receipt'}`}
-        subtitle="Automatic optical character recognition and field mismatch audit"
-        maxWidth="max-w-2xl"
+        title={`AI Document Verification & OCR: ${selectedDoc?.original_filename || 'Receipt'}`}
+        subtitle="Field-by-field verification, OCR extraction confidence, and AICTE statutory compliance"
+        maxWidth="max-w-4xl"
       >
         {docLoading ? (
           <div className="py-12 flex flex-col items-center justify-center space-y-2">
             <RefreshCw className="w-6 h-6 text-[#142B4A] animate-spin" />
-            <p className="text-xs text-slate-500">Loading OCR findings...</p>
+            <p className="text-xs text-slate-500">Loading document verification findings...</p>
           </div>
         ) : (
           <div className="space-y-4 text-xs">
@@ -1222,7 +1426,7 @@ export function FDRDetailPage() {
                   className={`p-3.5 rounded-xl border flex items-center justify-between ${
                     docDetail.discrepancy_report.overall_result === 'MATCH'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                      : docDetail.discrepancy_report.overall_result === 'DISCREPANCY_DETECTED'
+                      : (docDetail.discrepancy_report.overall_result === 'DISCREPANCY_FOUND' || docDetail.discrepancy_report.overall_result === 'DISCREPANCY_DETECTED')
                       ? 'bg-rose-50 border-rose-300 text-rose-900'
                       : 'bg-amber-50 border-amber-300 text-amber-900'
                   }`}
@@ -1230,47 +1434,305 @@ export function FDRDetailPage() {
                   <div className="flex items-center gap-2.5">
                     {docDetail.discrepancy_report.overall_result === 'MATCH' ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    ) : (docDetail.discrepancy_report.overall_result === 'DISCREPANCY_FOUND' || docDetail.discrepancy_report.overall_result === 'DISCREPANCY_DETECTED') ? (
+                      <AlertCircle className="w-5 h-5 text-rose-600" />
                     ) : (
                       <AlertTriangle className="w-5 h-5 text-amber-600" />
                     )}
                     <div>
-                      <span className="font-bold">Result: </span>
-                      <span className="font-mono">{docDetail.discrepancy_report.overall_result}</span>
+                      <span className="font-bold">Overall Verification Outcome: </span>
+                      <span className="font-mono font-bold">{docDetail.discrepancy_report.overall_result}</span>
                     </div>
                   </div>
-                  <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-white/60">
-                    Confidence: {docDetail.discrepancy_report.confidence_score || 'N/A'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xs font-semibold px-2.5 py-1 rounded-md bg-white/80 border border-slate-200 text-slate-700">
+                      OCR Confidence: {docDetail.discrepancy_report.confidence_display || docDetail.discrepancy_report.confidence_score || 'N/A'}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Extraction & OCR Diagnostics Bar */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-2xs font-semibold text-slate-500">Method:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-2xs font-bold ${
+                        docDetail.discrepancy_report.extraction_method === 'PDF_TEXT'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : docDetail.discrepancy_report.extraction_method === 'TESSERACT_OCR'
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}
+                    >
+                      {docDetail.discrepancy_report.extraction_method || (docDetail.discrepancy_report.is_digital_extraction ? 'PDF_TEXT' : 'TESSERACT_OCR')}
+                    </span>
+
+                    <span className="text-slate-300">•</span>
+                    <span className="text-2xs font-semibold text-slate-500">Fallback:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-2xs font-medium ${
+                        docDetail.discrepancy_report.fallback_triggered
+                          ? docDetail.discrepancy_report.extraction_method === 'TESSERACT_OCR'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {docDetail.discrepancy_report.fallback_triggered
+                        ? docDetail.discrepancy_report.extraction_method === 'TESSERACT_OCR'
+                          ? 'OCR Fallback Applied'
+                          : 'OCR Attempted (Unavailable)'
+                        : 'Direct Extraction'}
+                    </span>
+
+                    <span className="text-slate-300">•</span>
+                    <span className="text-2xs text-slate-600 font-medium">
+                      Pages: {docDetail.discrepancy_report.pages_processed || 1}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-2xs font-semibold text-slate-500">Status:</span>
+                    <span
+                      className={`text-2xs font-bold px-2 py-0.5 rounded border ${
+                        docDetail.discrepancy_report.extraction_method !== 'FAILED'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border-rose-200'
+                      }`}
+                    >
+                      {docDetail.discrepancy_report.extraction_method !== 'FAILED' ? 'SUCCESS' : 'FAILED'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Extraction Error Alert Banner */}
+                {docDetail.discrepancy_report.extraction_error && (
+                  <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-300 text-amber-950 flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 text-2xs">
+                      <p className="font-bold text-xs text-amber-900">Document Text Extraction Limitation:</p>
+                      <p className="leading-relaxed">{docDetail.discrepancy_report.extraction_error}</p>
+                      <p className="text-amber-800 italic mt-0.5">
+                        Please review the physical or scanned receipt manually. If Tesseract is not installed on the system PATH, optical character recognition cannot parse non-digital scans.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Field-by-Field Verification Table */}
+                {docDetail.discrepancy_report.field_analysis && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-[#142B4A]" />
+                        Field-by-Field Verification Audit
+                      </p>
+                      <span className="text-2xs text-slate-500 font-medium">
+                        Compares registered FDR values against extracted receipt text
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                      <table className="w-full text-left border-collapse text-2xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase">
+                          <tr>
+                            <th className="py-2.5 px-3">Field</th>
+                            <th className="py-2.5 px-3">Registered FDR Value</th>
+                            <th className="py-2.5 px-3">Extracted Receipt Value</th>
+                            <th className="py-2.5 px-3 text-center">OCR Conf.</th>
+                            <th className="py-2.5 px-3 text-center">Match Status</th>
+                            {isOfficerOrAdmin && <th className="py-2.5 px-3 text-right">Officer Field Review</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {Object.entries(docDetail.discrepancy_report.field_analysis).map(([fKey, fData]) => {
+                            const savedReview = docDetail.discrepancy_report.field_reviews?.[fKey]
+                            const currentInput = fieldReviewInputs[fKey] || {
+                              decision: savedReview?.decision || '',
+                              remarks: savedReview?.remarks || '',
+                            }
+
+                            return (
+                              <tr key={fKey} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-2.5 px-3 font-semibold text-slate-800">
+                                  {fData.label || fKey}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-slate-700 font-medium">
+                                  {fData.registered || <span className="text-slate-400 italic">Not set</span>}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono">
+                                  {fData.extracted ? (
+                                    <span
+                                      className={
+                                        fData.status === 'MATCH'
+                                          ? 'text-emerald-700 font-semibold'
+                                          : 'text-rose-700 font-semibold'
+                                      }
+                                    >
+                                      {fData.extracted}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600 italic">Not extracted</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                                  {fData.confidence_display || 'N/A'}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {fData.status === 'MATCH' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-emerald-100 text-emerald-800">
+                                      <Check className="w-3 h-3" /> MATCH
+                                    </span>
+                                  ) : fData.status === 'MISMATCH' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-rose-100 text-rose-800">
+                                      <AlertCircle className="w-3 h-3" /> MISMATCH
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-100 text-amber-800">
+                                      <Clock className="w-3 h-3" /> MANUAL REVIEW
+                                    </span>
+                                  )}
+                                </td>
+                                {isOfficerOrAdmin && (
+                                  <td className="py-2.5 px-3 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {savedReview ? (
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-3xs font-bold border ${
+                                            savedReview.decision === 'VERIFIED'
+                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                              : savedReview.decision === 'DISCREPANCY'
+                                              ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                              : 'bg-amber-50 text-amber-800 border-amber-300'
+                                          }`}
+                                          title={`Reviewed by ${savedReview.reviewed_by_name || savedReview.reviewed_by_email}`}
+                                        >
+                                          {savedReview.decision}
+                                        </span>
+                                      ) : null}
+                                      <select
+                                        value={currentInput.decision}
+                                        onChange={(e) =>
+                                          setFieldReviewInputs((prev) => ({
+                                            ...prev,
+                                            [fKey]: { ...currentInput, decision: e.target.value },
+                                          }))
+                                        }
+                                        className="px-2 py-1 text-2xs rounded border border-slate-300 bg-white"
+                                      >
+                                        <option value="">Decide...</option>
+                                        <option value="VERIFIED">Verified</option>
+                                        <option value="DISCREPANCY">Discrepancy</option>
+                                        <option value="NEEDS_CORRECTION">Needs Correction</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveFieldReview(fKey)}
+                                        disabled={!currentInput.decision || savingFieldKey === fKey}
+                                        className="px-2 py-1 bg-[#142B4A] text-white rounded text-2xs font-medium hover:bg-[#1B365D] disabled:opacity-50"
+                                      >
+                                        {savingFieldKey === fKey ? '...' : 'Save'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* AICTE Joint Lien Detection Card */}
+                {docDetail.discrepancy_report.joint_lien && (
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-[#142B4A]" />
+                        <span className="font-bold text-slate-800 text-xs">AICTE Joint Lien Endorsement Clause</span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-2xs font-bold border ${
+                          docDetail.discrepancy_report.joint_lien.status === 'DETECTED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : docDetail.discrepancy_report.joint_lien.status === 'AMBIGUOUS'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : docDetail.discrepancy_report.joint_lien.status === 'UNAVAILABLE'
+                            ? 'bg-orange-100 text-orange-900 border-orange-300'
+                            : 'bg-slate-100 text-slate-700 border-slate-300'
+                        }`}
+                      >
+                        {docDetail.discrepancy_report.joint_lien.status === 'UNAVAILABLE'
+                          ? 'EXTRACTION UNAVAILABLE'
+                          : docDetail.discrepancy_report.joint_lien.status}
+                      </span>
+                    </div>
+                    {docDetail.discrepancy_report.joint_lien.supporting_text ? (
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-slate-700 italic font-mono text-2xs">
+                        "{docDetail.discrepancy_report.joint_lien.supporting_text}"
+                      </div>
+                    ) : null}
+                    <p className="text-2xs text-slate-600 font-medium">
+                      {docDetail.discrepancy_report.joint_lien.note}
+                    </p>
+                    <p className="text-3xs text-slate-400 italic">
+                      {docDetail.discrepancy_report.joint_lien.disclaimer}
+                    </p>
+                  </div>
+                )}
 
                 {/* Discrepancies List */}
                 {docDetail.discrepancy_report.discrepancies?.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="font-bold text-slate-800">Detected Field Discrepancies:</p>
+                    <p className="font-bold text-slate-800">Detected Field Discrepancies & Audit Findings:</p>
                     <div className="space-y-1.5">
                       {docDetail.discrepancy_report.discrepancies.map((disc, idx) => (
                         <div key={idx} className="p-2.5 bg-rose-50/80 rounded-lg border border-rose-200 text-rose-900">
-                          <p className="font-semibold">{disc.field || 'Field Mismatch'}:</p>
+                          <p className="font-semibold">{disc.label || disc.field || 'Field Mismatch'}:</p>
                           <p className="text-2xs mt-0.5">{disc.description || disc.message || JSON.stringify(disc)}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 text-emerald-900">
-                    All scanned receipt details (Institution Name, Amount, Tenure, Joint Clause) match the registered FDR.
+                  <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 text-emerald-900 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>All scanned receipt details (FDR Number, Bank, Branch, Amount, Issue Date, Maturity Date) match the registered FDR.</span>
                   </div>
                 )}
+
+                {/* Raw Extracted Document Text Preview */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-800">Raw Extracted Document Text:</p>
+                    <span className="text-2xs text-slate-500 font-mono">
+                      {docDetail.discrepancy_report.raw_text
+                        ? `${docDetail.discrepancy_report.raw_text.length} characters`
+                        : '0 characters'}
+                    </span>
+                  </div>
+                  {docDetail.discrepancy_report.raw_text ? (
+                    <pre className="p-3 bg-slate-50 rounded-xl border border-slate-200 font-mono text-3xs text-slate-800 max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                      {docDetail.discrepancy_report.raw_text}
+                    </pre>
+                  ) : (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-2xs text-slate-400 italic text-center">
+                      No extractable text content available from this document.
+                    </div>
+                  )}
+                </div>
 
                 {/* Extracted Fields Summary */}
                 {docDetail.discrepancy_report.extracted_fields && (
                   <div className="space-y-2">
-                    <p className="font-bold text-slate-800">Extracted OCR Metadata:</p>
+                    <p className="font-bold text-slate-800">Raw Extracted OCR Metadata:</p>
                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 font-mono text-2xs space-y-1">
                       {Object.entries(docDetail.discrepancy_report.extracted_fields).map(([k, v]) => (
                         <div key={k} className="flex justify-between py-0.5 border-b border-slate-100 last:border-none">
                           <span className="text-slate-500">{k}:</span>
-                          <span className="font-semibold text-slate-800">{String(v)}</span>
+                          <span className="font-semibold text-slate-800">{v ? String(v) : '<not extracted>'}</span>
                         </div>
                       ))}
                     </div>
@@ -1284,9 +1746,16 @@ export function FDRDetailPage() {
             {/* Officer Document Verification Action */}
             {isOfficerOrAdmin && selectedDoc && (
               <form onSubmit={handleVerifyDocDecision} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 my-3">
-                <div className="flex items-center gap-2 font-bold text-slate-800">
-                  <ShieldCheck className="w-4 h-4 text-[#142B4A]" />
-                  <span>Official Document Scrutiny Decision</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-slate-800">
+                    <ShieldCheck className="w-4 h-4 text-[#142B4A]" />
+                    <span>Official Document Scrutiny Decision (Overall)</span>
+                  </div>
+                  {docDetail?.discrepancy_report?.document_review && (
+                    <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                      Saved Decision: {docDetail.discrepancy_report.document_review.decision}
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -1325,7 +1794,7 @@ export function FDRDetailPage() {
                     disabled={!docDecision}
                     loading={docVerifying}
                   >
-                    Record Decision
+                    Record Overall Decision
                   </Button>
                 </div>
               </form>
@@ -1359,6 +1828,29 @@ export function FDRDetailPage() {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleUploadDocument} className="space-y-4 text-xs">
+          {isDevDemoMode && (
+            <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white">Dev / Demo Mode</span>
+                  <span className="font-semibold text-xs text-indigo-900">Need a dummy receipt?</span>
+                </div>
+                <p className="text-2xs text-indigo-700">Download a compliant synthetic PDF receipt generated from this FDR's parameters.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                icon={Download}
+                loading={downloadingSynthetic}
+                onClick={() => handleDownloadSynthetic('MATCHING_FDR', 'pdf')}
+                className="border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-100 shrink-0 self-start sm:self-auto font-medium"
+              >
+                Download Test PDF
+              </Button>
+            </div>
+          )}
+
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Select Document (PDF / PNG / JPEG, max 10MB) <span className="text-rose-500">*</span>

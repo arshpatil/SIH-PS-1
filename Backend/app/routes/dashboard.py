@@ -183,10 +183,11 @@ def get_workload():
 @dashboard_bp.route("/admin", methods=["GET"])
 @roles_required(UserRole.ADMIN)
 def get_admin_dashboard():
-    """System-wide operational metrics, officer workloads, unassigned queue, and recent audit events for Admin."""
+    """System-wide operational metrics, officer workloads, SLA performance, and audit history for Admin."""
+    from app.services.assignment_service import calculate_admin_workload_metrics
+
     active_statuses = ["Submitted", "Under Review", "Documents Required", "Resubmitted / Awaiting Review"]
     now_utc = datetime.now(timezone.utc)
-    cutoff_overdue = now_utc - timedelta(days=14)
     cutoff_maturing = (now_utc + timedelta(days=30)).date()
 
     total_institutions = Institution.query.count()
@@ -207,43 +208,8 @@ def get_admin_dashboard():
     for st in ["Submitted", "Under Review", "Documents Required", "Resubmitted / Awaiting Review", "Approved", "Rejected", "Closed"]:
         petitions_by_status[st] = FDRRequest.query.filter(FDRRequest.status == st).count()
 
-    # Active officers
-    officers = User.query.filter(
-        User.role.in_([UserRole.AICTE_OFFICER.value, UserRole.ADMIN.value]),
-    ).order_by(User.full_name.asc()).all()
-    active_officers_count = sum(1 for o in officers if o.is_active)
-
-    officer_workloads = []
-    for off in officers:
-        assigned_count = FDRRequest.query.filter(
-            FDRRequest.assigned_to == off.id,
-            FDRRequest.status.in_(active_statuses),
-        ).count()
-        resolved_count = FDRRequest.query.filter(
-            FDRRequest.assigned_to == off.id,
-            FDRRequest.status.in_(["Approved", "Rejected", "Closed"]),
-        ).count()
-        overdue_count = FDRRequest.query.filter(
-            FDRRequest.assigned_to == off.id,
-            FDRRequest.status.in_(active_statuses),
-            FDRRequest.created_at <= cutoff_overdue,
-        ).count()
-        officer_workloads.append({
-            "officer_id": off.id,
-            "officer_name": off.full_name,
-            "officer_email": off.email,
-            "is_active": off.is_active,
-            "role": off.role,
-            "active_assigned_cases": assigned_count,
-            "resolved_cases": resolved_count,
-            "overdue_cases": overdue_count,
-        })
-
-    # Overdue cases count across the system
-    overdue_cases_count = FDRRequest.query.filter(
-        FDRRequest.status.in_(active_statuses),
-        FDRRequest.created_at <= cutoff_overdue,
-    ).count()
+    # Detailed workload & SLA statistics calculated dynamically from real DB records
+    workload_stats = calculate_admin_workload_metrics()
 
     # Upcoming maturities (<= 30 days)
     upcoming_maturities_count = FDRRecord.query.filter(
@@ -280,12 +246,17 @@ def get_admin_dashboard():
                 "total_petitions": total_petitions,
                 "unassigned_petitions_count": unassigned_count,
                 "petitions_by_status": petitions_by_status,
-                "active_officers_count": active_officers_count,
-                "overdue_cases_count": overdue_cases_count,
+                "active_officers_count": workload_stats["total_active_officers"],
+                "overdue_cases_count": workload_stats["system_overdue_cases"],
+                "critical_cases_count": workload_stats["system_critical_cases"],
                 "upcoming_maturities_count": upcoming_maturities_count,
+                "avg_processing_time_hours": workload_stats["system_avg_processing_time_hours"],
+                "avg_processing_time_days": workload_stats["system_avg_processing_time_days"],
+                "total_system_active_cases": workload_stats["total_system_active_cases"],
             },
+            "workload_metrics": workload_stats,
             "unassigned_queue": unassigned_petitions,
-            "officer_workloads": officer_workloads,
+            "officer_workloads": workload_stats["officers_workload"],
             "recent_audit_events": audit_list,
         }
     }), 200
@@ -351,8 +322,14 @@ def get_officer_dashboard():
         assigned_query.order_by(FDRRequest.updated_at.desc(), FDRRequest.created_at.desc()).all()
     )
     assigned_cases = [c.to_dict() for c in assigned_cases_raw]
-    priority_order = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    priority_order = {"CRITICAL": 0, "URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     assigned_cases.sort(key=lambda x: priority_order.get(x.get("priority", "LOW"), 4))
+
+    # Calculate smart priority counts
+    critical_cases_count = sum(1 for c in assigned_cases if c.get("priority") in ("CRITICAL", "URGENT") and c.get("status") not in ("Approved", "Rejected", "Closed"))
+    high_priority_count = sum(1 for c in assigned_cases if c.get("priority") == "HIGH" and c.get("status") not in ("Approved", "Rejected", "Closed"))
+    pending_review_count = sum(1 for c in assigned_cases if c.get("status") in active_statuses)
+    completed_cases_count = sum(1 for c in assigned_cases if c.get("status") in ("Approved", "Rejected", "Closed"))
 
     # 3. Unassigned / Claimable Petitions
     unassigned_raw = (
@@ -379,12 +356,25 @@ def get_officer_dashboard():
                 "rejected_cases": rejected_cases,
                 "overdue_cases": overdue_cases,
                 "approaching_maturity": approaching_maturity,
+                "critical_cases": critical_cases_count,
+                "high_priority_cases": high_priority_count,
+                "pending_review": pending_review_count,
+                "completed_cases": completed_cases_count,
                 "total_assigned": len(assigned_cases),
             },
             "assigned_cases": assigned_cases,
             "claimable_cases": claimable_cases,
         }
     }), 200
+
+
+@dashboard_bp.route("/scan-alerts", methods=["POST"])
+@roles_required(UserRole.ADMIN, UserRole.AICTE_OFFICER)
+def run_scan_alerts():
+    """Trigger the automated critical and overdue escalation watchdog scanner."""
+    from app.services.assignment_service import scan_and_alert_critical_and_overdue_petitions
+    result = scan_and_alert_critical_and_overdue_petitions()
+    return jsonify(result), 200
 
 
 @dashboard_bp.route("/officers", methods=["GET"])

@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import secrets
 from typing import Any
+from flask import current_app
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
@@ -169,20 +170,32 @@ def process_and_save_document(
         db.session.flush()
 
         # Run text extraction & discrepancy detection
-        raw_text, ocr_status, note = extract_text_from_document(
+        extraction = extract_text_from_document(
             target_path, mime_type, max_pages=max_pdf_pages
         )
 
-        extracted_fields = extract_fdr_fields(raw_text) if raw_text else {}
-        discrepancy_report = detect_fdr_discrepancies(extracted_fields, fdr)
+        extracted_fields = extract_fdr_fields(extraction.text) if extraction.text else {}
 
-        if note:
-            discrepancy_report["processing_note"] = note
+        discrepancy_report = detect_fdr_discrepancies(
+            extracted=extracted_fields,
+            fdr=fdr,
+            ocr_confidence=extraction.ocr_confidence,
+            word_confidences=extraction.word_confidences,
+            is_scanned=extraction.is_scanned,
+            document_text=str(extraction.text or ""),
+            extraction_method=extraction.extraction_method,
+            fallback_triggered=extraction.fallback_triggered,
+            pages_processed=extraction.pages_processed,
+            extraction_error=extraction.extraction_error,
+        )
+
+        if extraction.note:
+            discrepancy_report["processing_note"] = extraction.note
 
         # Update Document processing status
         doc_record.processing_status = (
             DocumentProcessingStatus.PROCESSED.value
-            if ocr_status == "PROCESSED"
+            if extraction.status == "PROCESSED"
             else DocumentProcessingStatus.FAILED.value
         )
 
@@ -239,4 +252,87 @@ def get_single_document(
         raise FDRNotFoundError("Document not found for this FDR record.")
 
     analysis = load_analysis_result(upload_dir, doc.stored_filename)
+    doc_path = upload_dir / doc.stored_filename
+
+    if not analysis and doc_path.exists():
+        # Auto-analyze document on first read if analysis was missing on disk
+        try:
+            ext = doc_path.suffix.lower()
+            mime = "application/pdf" if ext == ".pdf" else "image/png" if ext == ".png" else "image/jpeg"
+            extraction = extract_text_from_document(doc_path, mime)
+            extracted_fields = extract_fdr_fields(extraction.text) if extraction.text else {}
+            analysis = detect_fdr_discrepancies(
+                extracted=extracted_fields,
+                fdr=fdr,
+                ocr_confidence=extraction.ocr_confidence,
+                word_confidences=extraction.word_confidences,
+                is_scanned=extraction.is_scanned,
+                document_text=str(extraction.text or ""),
+                extraction_method=extraction.extraction_method,
+                fallback_triggered=extraction.fallback_triggered,
+                pages_processed=extraction.pages_processed,
+                extraction_error=extraction.extraction_error,
+            )
+            if extraction.note:
+                analysis["processing_note"] = extraction.note
+            save_analysis_result(upload_dir, doc.stored_filename, analysis)
+        except Exception as e:
+            current_app.logger.warning(f"Failed to generate analysis on the fly for document {doc.id}: {e}")
+    elif analysis and (
+        "field_analysis" not in analysis
+        or "joint_lien" not in analysis
+        or "extraction_diagnostics" not in analysis
+    ):
+        # Dynamically enrich legacy analysis reports without data loss
+        extracted = analysis.get("extracted_fields", {})
+        doc_text = analysis.get("extraction_diagnostics", {}).get("raw_text", "")
+        method = analysis.get("extraction_diagnostics", {}).get("method", "PDF_TEXT" if not analysis.get("is_scanned") else "TESSERACT_OCR")
+        err = analysis.get("processing_note") or analysis.get("extraction_error")
+        is_scanned = analysis.get("is_scanned", False)
+        fallback = analysis.get("fallback_triggered", False)
+        pages = analysis.get("pages_processed", 1)
+
+        if not doc_text and doc_path.exists():
+            try:
+                ext = doc_path.suffix.lower()
+                mime = "application/pdf" if ext == ".pdf" else "image/png" if ext == ".png" else "image/jpeg"
+                extraction = extract_text_from_document(doc_path, mime)
+                doc_text = extraction.text
+                method = extraction.extraction_method
+                err = extraction.extraction_error or extraction.note
+                is_scanned = extraction.is_scanned
+                fallback = extraction.fallback_triggered
+                pages = extraction.pages_processed
+                if not extracted and doc_text:
+                    extracted = extract_fdr_fields(doc_text)
+                    analysis["extracted_fields"] = extracted
+            except Exception as e:
+                current_app.logger.debug(f"Could not extract doc text during legacy enrichment: {e}")
+
+        enriched = detect_fdr_discrepancies(
+            extracted=extracted,
+            fdr=fdr,
+            document_text=doc_text,
+            is_scanned=is_scanned,
+            extraction_method=method,
+            fallback_triggered=fallback,
+            pages_processed=pages,
+            extraction_error=err,
+        )
+        for k in (
+            "field_analysis",
+            "joint_lien",
+            "discrepancies",
+            "extraction_diagnostics",
+            "raw_text",
+            "is_digital_extraction",
+            "extraction_method",
+            "fallback_triggered",
+            "pages_processed",
+            "extraction_error",
+        ):
+            if k in enriched and (k not in analysis or not analysis[k]):
+                analysis[k] = enriched[k]
+        save_analysis_result(upload_dir, doc.stored_filename, analysis)
+
     return doc, analysis

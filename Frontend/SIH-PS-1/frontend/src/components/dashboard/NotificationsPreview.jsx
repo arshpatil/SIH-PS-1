@@ -12,25 +12,26 @@ export function NotificationsPreview() {
   const recentNotifications = notifications.slice(0, 4)
 
   const getNotificationIcon = (type, category) => {
-    if (category === 'urgency') return <AlertTriangle className="w-4 h-4 text-amber-600" />
-    if (category === 'warning') return <AlertTriangle className="w-4 h-4 text-rose-600" />
-    if (type === 'Verification') return <Clock className="w-4 h-4 text-blue-600" />
-    return <Info className="w-4 h-4 text-slate-600" />
+    if (category === 'urgency') return <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+    if (category === 'warning') return <AlertTriangle className="w-3.5 h-3.5 text-rose-700" />
+    if (type === 'Verification') return <Clock className="w-3.5 h-3.5 text-blue-700" />
+    return <Info className="w-3.5 h-3.5 text-navy-700" />
   }
 
   return (
     <Card className="flex flex-col h-full">
       <CardHeader
-        title="Notifications & Alerts"
+        title="Official Notices & Alerts"
         subtitle={
           unreadCount > 0
-            ? `${unreadCount} unread notification(s) requiring your attention`
-            : 'All current notifications are marked as read'
+            ? `${unreadCount} unread notices requiring scrutiny`
+            : 'All notices are acknowledged'
         }
+        icon={Bell}
         action={
           <Link
             to="/notifications"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#142B4A] hover:text-[#0E1E34] hover:underline"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 hover:text-navy-900 hover:underline"
           >
             <span>View All</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -40,49 +41,49 @@ export function NotificationsPreview() {
 
       {recentNotifications.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
-          <Bell className="w-8 h-8 text-slate-300 mb-2" />
+          <Bell className="w-7 h-7 text-slate-300 mb-2" />
           <p className="text-xs font-medium">No alerts at this moment.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {recentNotifications.map((notif) => (
             <div
               key={notif.id}
-              className={`p-3 rounded-xl border transition-all text-xs flex items-start justify-between gap-3 ${
+              className={`p-2.5 sm:p-3 rounded-lg border transition-all text-xs flex items-start justify-between gap-2.5 ${
                 notif.isRead
-                  ? 'bg-white border-slate-200/80'
-                  : 'bg-amber-50/40 border-amber-200/80 shadow-2xs'
+                  ? 'bg-white border-slate-200'
+                  : 'bg-amber-50/40 border-amber-200 shadow-2xs'
               }`}
             >
-              <div className="flex items-start gap-2.5">
+              <div className="flex items-start gap-2.5 min-w-0">
                 <div
-                  className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
+                  className={`p-1.5 rounded-md shrink-0 mt-0.5 ${
                     notif.category === 'urgency'
-                      ? 'bg-amber-100'
+                      ? 'bg-amber-100 text-amber-800'
                       : notif.category === 'warning'
-                      ? 'bg-rose-100'
-                      : 'bg-slate-100'
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-slate-100 text-slate-700'
                   }`}
                 >
                   {getNotificationIcon(notif.type, notif.category)}
                 </div>
 
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900">{notif.title}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-900 truncate">{notif.title}</span>
                     {!notif.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                     )}
                   </div>
-                  <p className="text-slate-600 mt-1 leading-relaxed">{notif.message}</p>
-                  <div className="flex items-center gap-3 mt-2 text-2xs text-slate-600">
+                  <p className="text-slate-600 text-2xs mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
+                  <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
                     <span>{formatDate(notif.timestamp)}</span>
                     {notif.link && (
                       <Link
                         to={notif.link}
-                        className="font-medium text-[#142B4A] hover:underline"
+                        className="font-semibold text-navy-700 hover:underline"
                       >
-                        {notif.linkText || 'View Details'}
+                        {notif.linkText || 'Details'}
                       </Link>
                     )}
                   </div>
@@ -106,3 +107,5 @@ export function NotificationsPreview() {
     </Card>
   )
 }
+
+export default NotificationsPreview

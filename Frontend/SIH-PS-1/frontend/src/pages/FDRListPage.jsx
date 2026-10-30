@@ -153,21 +153,21 @@ export function FDRListPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Header and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            {isOfficerOrAdmin ? 'AICTE FDR Scrutiny & Regulatory Repository' : 'Institutional Fixed Deposit Receipts'}
+            {isOfficerOrAdmin ? 'AICTE FDR Scrutiny & Regulatory Repository' : 'Fixed Deposit Receipts (FDRs)'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {isOfficerOrAdmin
-              ? `Review, verify, or return institutional FDRs across accredited technical colleges. Total records: ${fdrs.length}`
-              : `Official repository of all security deposits submitted to AICTE. Total: ${fdrs.length} records.`}
+              ? `Review, verify, and scrutinize institutional FDRs across accredited technical colleges. Total records: ${fdrs.length}`
+              : `Official repository of all security deposits submitted and pledged jointly to AICTE. Total: ${fdrs.length} records.`}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="secondary"
             size="md"
@@ -191,8 +191,8 @@ export function FDRListPage() {
 
           {!isOfficerOrAdmin && (
             <Link to="/upload">
-              <Button variant="primary" size="md" icon={PlusCircle}>
-                Upload New FDR
+              <Button variant="warning" size="md" icon={PlusCircle} className="font-semibold shadow-xs">
+                Deposit New FDR
               </Button>
             </Link>
           )}
@@ -200,20 +200,20 @@ export function FDRListPage() {
       </div>
 
       {/* Filter and Search Bar Card */}
-      <Card className="p-4 sm:p-5">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+      <Card className="p-3.5 sm:p-4.5">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-center">
           {/* Search Box */}
           <div className="md:col-span-5 relative">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder={isOfficerOrAdmin ? 'Search by FDR ref, bank, or college name...' : 'Search by FDR number or bank name...'}
+              placeholder={isOfficerOrAdmin ? 'Search by FDR ref, bank, or institution name...' : 'Search by FDR number or bank name...'}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20 focus:border-[#142B4A] bg-white text-slate-900 placeholder:text-slate-400"
+              className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20 focus:border-[#142B4A] bg-white text-slate-900 placeholder:text-slate-400"
             />
           </div>
 
@@ -225,7 +225,7 @@ export function FDRListPage() {
                 setStatusFilter(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full pl-8 pr-7 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full pl-7 pr-7 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
               {SCRUTINY_STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -233,7 +233,7 @@ export function FDRListPage() {
                 </option>
               ))}
             </select>
-            <Filter className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Filter className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
 
           {/* Maturity Period Filter */}
@@ -244,18 +244,18 @@ export function FDRListPage() {
                 setMaturityFilter(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full pl-8 pr-7 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full pl-7 pr-7 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
               <option value="ALL">All Maturity Horizons</option>
               <option value="90D">Expiring in 61–90 Days</option>
               <option value="60D">Expiring in 31–60 Days</option>
               <option value="30D">Expiring in 8–30 Days</option>
-              <option value="7D">Critical (≤7 Days Left)</option>
+              <option value="7D">Critical (&le;7 Days Left)</option>
               <option value="MATURED">Matured (0–30 Days Grace)</option>
               <option value="OVERDUE_ACTION">Overdue Action (&gt;30d Past)</option>
               <option value="ACTIVE">Active (&gt;90 Days Remaining)</option>
             </select>
-            <Calendar className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Calendar className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
 
           {/* Reset Action */}
@@ -263,7 +263,7 @@ export function FDRListPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline transition-colors"
+              className="text-2xs font-semibold text-slate-500 hover:text-navy-800 underline transition-colors"
             >
               Reset
             </button>
@@ -285,10 +285,10 @@ export function FDRListPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-50">
-                    <th className="py-3 px-5">
+                  <tr className="border-b border-slate-200 text-2xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/70">
+                    <th className="py-2.5 px-4">
                       <button
                         onClick={() => handleSort('fdrNumber')}
                         className="flex items-center gap-1.5 hover:text-slate-900"
@@ -297,9 +297,9 @@ export function FDRListPage() {
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </th>
-                    {isOfficerOrAdmin && <th className="py-3 px-5">Institution</th>}
-                    <th className="py-3 px-5">Bank & Branch</th>
-                    <th className="py-3 px-5">
+                    {isOfficerOrAdmin && <th className="py-2.5 px-4">Institution</th>}
+                    <th className="py-2.5 px-4">Bank & Branch</th>
+                    <th className="py-2.5 px-4">
                       <button
                         onClick={() => handleSort('depositAmount')}
                         className="flex items-center gap-1.5 hover:text-slate-900"
@@ -308,7 +308,7 @@ export function FDRListPage() {
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </th>
-                    <th className="py-3 px-5">
+                    <th className="py-2.5 px-4">
                       <button
                         onClick={() => handleSort('issueDate')}
                         className="flex items-center gap-1.5 hover:text-slate-900"
@@ -317,7 +317,7 @@ export function FDRListPage() {
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </th>
-                    <th className="py-3 px-5">
+                    <th className="py-2.5 px-4">
                       <button
                         onClick={() => handleSort('maturityDate')}
                         className="flex items-center gap-1.5 hover:text-slate-900"
@@ -326,11 +326,11 @@ export function FDRListPage() {
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </th>
-                    <th className="py-3 px-5">Scrutiny Status</th>
-                    <th className="py-3 px-5 text-right">Actions</th>
+                    <th className="py-2.5 px-4">Scrutiny Status</th>
+                    <th className="py-2.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
+                <tbody className="divide-y divide-slate-100">
                   {paginatedFDRs.map((fdr) => {
                     const daysLeft = getDaysRemaining(fdr.maturityDate)
                     const isMaturityUrgent =
@@ -347,67 +347,65 @@ export function FDRListPage() {
                           isMaturityUrgent ? 'bg-amber-50/20' : ''
                         }`}
                       >
-                        <td className="py-4 px-5">
+                        <td className="py-3 px-4">
                           <Link
                             to={`/fdrs/${fdr.id}`}
-                            className="font-mono font-semibold text-[#142B4A] hover:underline"
+                            className="font-mono font-semibold text-navy-800 hover:underline"
                           >
                             {fdr.fdrNumber}
                           </Link>
                           {fdr.validity_status && fdr.validity_status !== 'ACTIVE' && (
-                            <p className="text-2xs font-semibold text-amber-700 mt-0.5">
+                            <p className="text-[10px] font-semibold text-amber-800 mt-0.5">
                               Validity: {fdr.validity_status}
                             </p>
                           )}
                         </td>
                         {isOfficerOrAdmin && (
-                          <td className="py-4 px-5">
+                          <td className="py-3 px-4">
                             <p className="font-semibold text-slate-800 text-xs truncate max-w-xs flex items-center gap-1">
                               <Building className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>{fdr.institution_name || 'Affiliated College'}</span>
                             </p>
                           </td>
                         )}
-                        <td className="py-4 px-5">
-                          <p className="font-medium text-slate-800 text-xs sm:text-sm">
+                        <td className="py-3 px-4">
+                          <p className="font-medium text-slate-800 text-xs">
                             {fdr.bankName}
                           </p>
                           {fdr.branchName && (
-                            <p className="text-2xs text-slate-500 truncate max-w-xs mt-0.5">
+                            <p className="text-2xs text-slate-400 truncate max-w-xs mt-0.5">
                               {fdr.branchName}
                             </p>
                           )}
                         </td>
-                        <td className="py-4 px-5 font-bold text-slate-900 text-sm">
+                        <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                           {formatCurrency(fdr.depositAmount)}
                         </td>
-                        <td className="py-4 px-5 text-slate-600 text-xs whitespace-nowrap">
+                        <td className="py-3 px-4 text-slate-600 tabular-nums whitespace-nowrap">
                           {formatDate(fdr.issueDate)}
                         </td>
-                        <td className="py-4 px-5 whitespace-nowrap">
-                          <p className="text-xs text-slate-700 font-medium">
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <p className="text-xs text-slate-700 font-medium tabular-nums">
                             {formatDate(fdr.maturityDate)}
                           </p>
                           {isMaturityUrgent && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-semibold mt-0.5">
-                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-800 font-semibold mt-0.5">
+                              <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
                               {daysLeft} days left
                             </span>
                           )}
                         </td>
-                        <td className="py-4 px-5 whitespace-nowrap">
+                        <td className="py-3 px-4 whitespace-nowrap">
                           <FDRStatusBadge status={fdr.scrutiny_status || fdr.status} size="sm" />
                         </td>
-                        <td className="py-4 px-5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              to={`/fdrs/${fdr.id}`}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-[#142B4A] bg-slate-100 hover:bg-[#142B4A] hover:text-white rounded-lg transition-colors"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>{isOfficerOrAdmin ? 'Scrutiny & Review' : 'View Details'}</span>
-                            </Link>
-                          </div>
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <Link
+                            to={`/fdrs/${fdr.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium text-navy-700 hover:bg-navy-50 rounded border border-slate-200 transition-colors"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>{isOfficerOrAdmin ? 'Scrutinize' : 'Details'}</span>
+                          </Link>
                         </td>
                       </tr>
                     )
@@ -417,34 +415,34 @@ export function FDRListPage() {
             </div>
 
             {/* Pagination Controls */}
-            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50 gap-3 text-xs text-slate-600">
+            <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 border-t border-slate-100 bg-slate-50/50 gap-2.5 text-xs text-slate-600">
               <div>
                 Showing{' '}
-                <span className="font-semibold text-slate-800">
+                <span className="font-semibold text-slate-800 tabular-nums">
                   {Math.min(filteredFDRs.length, (currentPage - 1) * pageSize + 1)}
                 </span>{' '}
                 to{' '}
-                <span className="font-semibold text-slate-800">
+                <span className="font-semibold text-slate-800 tabular-nums">
                   {Math.min(filteredFDRs.length, currentPage * pageSize)}
                 </span>{' '}
-                of <span className="font-semibold text-slate-800">{filteredFDRs.length}</span> records
+                of <span className="font-semibold text-slate-800 tabular-nums">{filteredFDRs.length}</span> records
               </div>
 
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="xs"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                 >
                   Previous
                 </Button>
-                <span className="px-2 font-medium">
+                <span className="px-2 text-2xs font-medium tabular-nums">
                   Page {currentPage} of {totalPages}
                 </span>
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="xs"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                 >

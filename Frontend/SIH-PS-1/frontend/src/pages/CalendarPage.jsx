@@ -64,18 +64,18 @@ export function CalendarPage() {
     currentUser?.role_category === 'ADMIN'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Page Header */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200/80 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl shadow-card border border-slate-200 p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-2xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-            <CalendarIcon className="w-4 h-4 text-[#142B4A]" />
+          <div className="flex items-center gap-1.5 text-2xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+            <CalendarIcon className="w-3.5 h-3.5 text-navy-700" />
             <span>AICTE Statutory Operations Timeline</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Interactive FDR Maturity & Renewal Calendar
+            Compliance & Maturity Calendar
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
             {isOfficerOrAdmin
               ? 'Authorized regulatory schedule of official deposit terms, statutory scrutiny deadlines, renewed receipt verifications, and compliance enforcement.'
               : 'Institutional schedule of your joint FDR deposit maturities, renewal petition milestones, and required renewed bank receipt uploads.'}
@@ -94,59 +94,59 @@ export function CalendarPage() {
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4.5">
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-rose-50 text-rose-700 border border-rose-200/60 flex items-center justify-center shrink-0">
             <Clock className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs font-semibold text-slate-500 uppercase tracking-wider truncate">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
               Deposit Maturities
             </p>
-            <p className="text-lg font-bold text-slate-900">{metrics.maturities}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums">{metrics.maturities}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center justify-center shrink-0">
             <FileCheck2 className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs font-semibold text-slate-500 uppercase tracking-wider truncate">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
               Renewal Receipts Due
             </p>
-            <p className="text-lg font-bold text-slate-900">{metrics.receiptsDue}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums">{metrics.receiptsDue}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 border border-purple-200/60 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs font-semibold text-slate-500 uppercase tracking-wider truncate">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
               Pending Verification
             </p>
-            <p className="text-lg font-bold text-slate-900">{metrics.verificationPending}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums">{metrics.verificationPending}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60 flex items-center justify-center shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs font-semibold text-slate-500 uppercase tracking-wider truncate">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
               Scrutiny Deadlines
             </p>
-            <p className="text-lg font-bold text-slate-900">{metrics.deadlines}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums">{metrics.deadlines}</p>
           </div>
         </div>
       </div>
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
+        <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{error}</span>
         </div>

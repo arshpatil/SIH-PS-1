@@ -138,30 +138,43 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-2xl">
-        {/* Emblem & Branding */}
-        <div className="flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[#142B4A] text-amber-400 flex items-center justify-center shadow-lg mb-4">
-            <ShieldCheck className="w-10 h-10" />
+    <div className="min-h-screen bg-[#F4F7FB] flex flex-col justify-between">
+      {/* Official Government Top Bar */}
+      <header className="bg-[#0B1B3D] text-slate-300 px-4 sm:px-8 py-2 text-xs border-b border-white/10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-400" />
+          <span className="text-white font-semibold tracking-wide">भारत सरकार</span>
+          <span className="text-slate-400">|</span>
+          <span className="text-slate-200">Government of India</span>
+        </div>
+        <div className="text-[11px] text-slate-300 hidden sm:block">
+          अखिल भारतीय तकनीकी शिक्षा परिषद (AICTE)
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8 max-w-2xl w-full mx-auto">
+        {/* Emblem & Branding Header */}
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-xl bg-[#0B1B3D] text-amber-400 flex items-center justify-center shadow-card mx-auto mb-3 border border-amber-400/30">
+            <ShieldCheck className="w-8 h-8 text-amber-400" />
           </div>
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 mb-2">
-            AICTE Security Deposit Cell
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#142B4A] tracking-tight">
+          <div className="inline-flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-navy-800 bg-navy-50 px-3 py-0.5 rounded-full border border-navy-200 mb-1.5">
+            <span>AICTE Security Deposit Cell</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
             Register New Institution
-          </h2>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-md">
+          </h1>
+          <p className="mt-1 text-2xs sm:text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
             Enroll your technical or educational institute for statutory FDR joint-lien management and AICTE compliance tracking.
           </p>
         </div>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-2xl">
-        <div className="bg-white py-8 px-6 sm:px-10 shadow-dropdown rounded-2xl border border-slate-200 space-y-6">
+        {/* Form Card */}
+        <div className="bg-white py-6 sm:py-8 px-5 sm:px-8 shadow-dropdown rounded-xl border border-slate-200 space-y-5">
           {/* Success Banner */}
           {successMessage && (
-            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-xs sm:text-sm flex items-start gap-3">
+            <div className="p-3.5 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-950 text-xs flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">Registration Successful</p>
@@ -172,7 +185,7 @@ export function RegisterPage() {
 
           {/* General Error Banner */}
           {generalError && (
-            <div className="p-4 bg-rose-50 rounded-xl border border-rose-200 text-rose-900 text-xs sm:text-sm flex items-start gap-3">
+            <div className="p-3.5 bg-rose-50 rounded-lg border border-rose-200 text-rose-950 text-xs flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">Registration Error</p>
@@ -182,12 +195,12 @@ export function RegisterPage() {
           )}
 
           {/* Guidelines Notice */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 text-xs flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-[#142B4A] shrink-0 mt-0.5" />
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-slate-700 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-navy-700 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-slate-900">Institutional Portal Registration</p>
               <p className="mt-0.5 text-2xs text-slate-500 leading-relaxed">
-                Public registration creates primary Institutional Administrator accounts. Bureau Officer and System Administrator credentials are authorized centrally by AICTE.
+                Public registration enrolls primary Technical Institution accounts. Bureau Officer and System Administrator credentials are authorized directly by AICTE Central Administration.
               </p>
             </div>
           </div>
@@ -195,8 +208,8 @@ export function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Institution Name */}
             <div>
-              <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
-                Institution Full Name <span className="text-rose-500">*</span>
+              <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                Institution Full Legal Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -207,7 +220,7 @@ export function RegisterPage() {
                   onChange={handleChange}
                   placeholder="e.g. Apex Institute of Engineering & Technology"
                   required
-                  className={`w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                  className={`w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border ${
                     fieldErrors.name ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                   } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                 />
@@ -218,9 +231,9 @@ export function RegisterPage() {
             </div>
 
             {/* Grid 1: Official Email & AICTE Permanent ID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                   Official Institution Email <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -232,7 +245,7 @@ export function RegisterPage() {
                     onChange={handleChange}
                     placeholder="e.g. principal@apexinstitute.edu.in"
                     required
-                    className={`w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                    className={`w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border ${
                       fieldErrors.email ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                     } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                   />
@@ -243,7 +256,7 @@ export function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                   AICTE Permanent ID / Approval Code
                 </label>
                 <div className="relative">
@@ -253,23 +266,18 @@ export function RegisterPage() {
                     name="institution_code"
                     value={formData.institution_code}
                     onChange={handleChange}
-                    placeholder="e.g. 1-1097213847 (Optional, auto-generated if blank)"
-                    className={`w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border ${
-                      fieldErrors.institution_code ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
-                    } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
+                    placeholder="e.g. 1-4392817291"
+                    className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20 font-mono"
                   />
                 </div>
-                {fieldErrors.institution_code && (
-                  <p className="text-2xs text-rose-600 mt-1">{fieldErrors.institution_code}</p>
-                )}
               </div>
             </div>
 
             {/* Grid 2: Principal / Contact Person & Phone */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
-                  Principal / Authorized Contact Name <span className="text-rose-500">*</span>
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                  Principal / Head of Institution <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -278,9 +286,9 @@ export function RegisterPage() {
                     name="contact_person"
                     value={formData.contact_person}
                     onChange={handleChange}
-                    placeholder="e.g. Dr. Rajesh K. Sharma"
+                    placeholder="e.g. Dr. Rajesh Sharma"
                     required
-                    className={`w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                    className={`w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border ${
                       fieldErrors.contact_person ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                     } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                   />
@@ -291,8 +299,8 @@ export function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
-                  Contact Phone Number
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                  Contact Phone / Mobile
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -301,8 +309,8 @@ export function RegisterPage() {
                     name="contact_phone"
                     value={formData.contact_phone}
                     onChange={handleChange}
-                    placeholder="e.g. +91 9876543210"
-                    className={`w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                    placeholder="e.g. +91 98765 43210"
+                    className={`w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border ${
                       fieldErrors.contact_phone ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                     } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                   />
@@ -313,29 +321,29 @@ export function RegisterPage() {
               </div>
             </div>
 
-            {/* Address */}
+            {/* Campus Address */}
             <div>
-              <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+              <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                 Campus Postal Address
               </label>
               <div className="relative">
-                <MapPin className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <MapPin className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                 <textarea
                   name="address"
                   rows={2}
                   value={formData.address}
                   onChange={handleChange}
-                  placeholder="e.g. Plot No. 12, Institutional Area, Sector 62, Noida, Uttar Pradesh 201309"
+                  placeholder="e.g. Sector 12, Institutional Area, Knowledge Park..."
                   className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
                 />
               </div>
             </div>
 
             {/* Grid 3: Password & Confirm Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
-                  Portal Password <span className="text-rose-500">*</span>
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
+                  Account Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -344,9 +352,9 @@ export function RegisterPage() {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    placeholder="Min 8 characters (letters & numbers)"
+                    placeholder="Min 8 characters (letters + numbers)"
                     required
-                    className={`w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                    className={`w-full pl-9 pr-9 py-2 text-xs sm:text-sm rounded-lg border ${
                       fieldErrors.password ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                     } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                   />
@@ -364,7 +372,7 @@ export function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+                <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                   Confirm Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -376,7 +384,7 @@ export function RegisterPage() {
                     onChange={handleChange}
                     placeholder="Re-enter password"
                     required
-                    className={`w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm rounded-lg border ${
+                    className={`w-full pl-9 pr-9 py-2 text-xs sm:text-sm rounded-lg border ${
                       fieldErrors.confirm_password ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-300'
                     } bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20`}
                   />
@@ -397,26 +405,29 @@ export function RegisterPage() {
             <Button
               type="submit"
               variant="primary"
-              size="lg"
-              className="w-full mt-2"
+              size="md"
+              className="w-full mt-3"
               loading={loading}
               icon={ArrowRight}
+              iconPosition="right"
             >
-              Complete Registration & Create Account
+              Complete Registration
             </Button>
           </form>
 
-          {/* Link back to login */}
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-600">
-              Already have an AICTE institutional account?{' '}
-              <Link to="/login" className="font-semibold text-[#142B4A] hover:underline">
-                Sign in to FDR Portal
-              </Link>
-            </p>
+          <div className="pt-3 border-t border-slate-100 text-center text-xs text-slate-600">
+            <span>Already have an institutional account? </span>
+            <Link to="/login" className="font-semibold text-navy-800 hover:underline">
+              Sign In Here &rarr;
+            </Link>
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="py-3 px-4 text-center text-2xs text-slate-500 border-t border-slate-200 bg-white">
+        <span>All India Council for Technical Education (AICTE) — Technical Institutions Registration Gateway</span>
+      </footer>
     </div>
   )
 }

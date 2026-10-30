@@ -1,46 +1,48 @@
 import React from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { LogOut, AlertTriangle } from 'lucide-react'
+import { LogOut, AlertCircle } from 'lucide-react'
 
 export function LogoutModal({ isOpen, onClose, onConfirm }) {
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Exit Demonstration Session"
-      subtitle="FDR Management System — College Portal"
+      title="Sign Out of Session"
+      subtitle="AICTE Fixed Deposit Receipt Management Portal"
       maxWidth="max-w-md"
     >
       <div className="space-y-4">
-        <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-          <span>
-            This is a frontend demonstration session. Logging out will return you to the college login screen.
+        <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 text-xs">
+          <AlertCircle className="w-4 h-4 text-navy-700 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            Signing out will conclude your current authorized session. Any unsaved form drafts will be discarded.
           </span>
         </div>
 
-        <p className="text-sm text-slate-600">
-          Are you sure you want to sign out of the college administrator portal?
+        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+          Are you sure you want to end your current portal session and return to the login gateway?
         </p>
 
-        <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-          <Button variant="secondary" size="md" onClick={onClose}>
-            Cancel
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Stay Signed In
           </Button>
           <Button
             variant="danger"
-            size="md"
+            size="sm"
             icon={LogOut}
             onClick={() => {
               onConfirm()
               onClose()
             }}
           >
-            Sign Out
+            Confirm Sign Out
           </Button>
         </div>
       </div>
     </Modal>
   )
 }
+
+export default LogoutModal

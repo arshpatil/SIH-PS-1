@@ -11,7 +11,7 @@ from app.models.audit import AuditLog
 from app.models.document import Document
 from app.models.enums import DocumentProcessingStatus, NotificationType, UserRole, ValidityStatus
 from app.models.fdr import FDRRecord
-from app.models.fdr_request import FDRRequest
+from app.models.fdr_request import FDRRequest, PetitionAssignmentHistory
 from app.models.notification import Notification
 from app.models.renewal_history import FDRRenewalHistory
 from app.models.user import User
@@ -252,6 +252,9 @@ def get_request_detail(request_id):
 
     req_dict = fdr_req.to_dict()
     req_dict["history"] = history
+    if user_category in ("AICTE_OFFICER", "ADMIN"):
+        req_dict["assignment_history"] = [h.to_dict() for h in fdr_req.assignment_history.all()]
+        req_dict["assignmentHistory"] = req_dict["assignment_history"]
 
     return jsonify({"success": True, "data": req_dict}), 200
 
@@ -410,6 +413,25 @@ def create_request():
         current_app.logger.error(
             f"Non-fatal error delivering petition creation email for REQ-{fdr_req.id:04d}: {email_err}"
         )
+
+    # Automatic Workload-Based Petition Assignment
+    auto_assign_enabled = current_app.config.get("AUTO_ASSIGN_PETITIONS", True)
+    auto_assign_opt = None
+    if request.content_type and "multipart/form-data" in request.content_type:
+        auto_assign_opt = request.form.get("auto_assign")
+    elif request.is_json:
+        auto_assign_opt = (request.get_json(silent=True) or {}).get("auto_assign")
+    if auto_assign_opt is not None:
+        auto_assign_enabled = str(auto_assign_opt).lower() in ("true", "1", "yes")
+
+    if auto_assign_enabled:
+        try:
+            from app.services.assignment_service import auto_assign_petition
+            auto_assign_petition(fdr_req, commit=True)
+        except Exception as assign_err:
+            current_app.logger.error(
+                f"Non-fatal error during automatic assignment for REQ-{fdr_req.id:04d}: {assign_err}"
+            )
 
     return (
         jsonify(
@@ -1072,7 +1094,7 @@ def verify_renewal(request_id):
 @requests_bp.route("/<request_id>/assign", methods=["PATCH"])
 @roles_required(UserRole.ADMIN, UserRole.AICTE_OFFICER)
 def assign_request(request_id):
-    """Assign or reassign a petition to an authorized AICTE scrutiny officer."""
+    """Assign or reassign a petition to an authorized AICTE scrutiny officer with reason and audit history."""
     numeric_id = parse_request_id(request_id)
     if not numeric_id:
         return jsonify({"error": "Petition request not found.", "code": "NOT_FOUND"}), 404
@@ -1082,6 +1104,7 @@ def assign_request(request_id):
 
     data = request.get_json(silent=True) or {}
     officer_id = data.get("officer_id") or data.get("assigned_to")
+    reason = data.get("reason") or data.get("remarks") or ""
 
     if officer_id is not None:
         try:
@@ -1093,64 +1116,62 @@ def assign_request(request_id):
     if not fdr_req:
         return jsonify({"error": "Petition request not found.", "code": "NOT_FOUND"}), 404
 
-    target_officer = None
     if officer_id:
-        target_officer = db.session.get(User, officer_id)
-        if not target_officer:
-            return jsonify({"error": f"Officer with ID {officer_id} not found.", "code": "OFFICER_NOT_FOUND"}), 404
-
-        officer_cat = UserRole.normalize_category(target_officer.role)
-        if officer_cat not in ("AICTE_OFFICER", "ADMIN"):
-            return (
-                jsonify(
-                    {
-                        "error": "Assigned user must have AICTE_OFFICER or ADMIN role.",
-                        "code": "INVALID_OFFICER_ROLE",
-                    }
-                ),
-                400,
-            )
-
-    old_assignee_id = fdr_req.assigned_to
-    fdr_req.assigned_to = officer_id
-
-    # Audit log assignment
-    audit = AuditLog(
-        user_id=g.current_user.id,
-        action="REQUEST_ASSIGNED",
-        entity_type="FDRRequest",
-        entity_id=fdr_req.id,
-        details=(
-            f"Petition REQ-{fdr_req.id:04d} assigned to "
-            f"{target_officer.full_name if target_officer else 'Unassigned'} "
-            f"(Previous: ID {old_assignee_id})."
-        ),
-    )
-    db.session.add(audit)
-
-    # Notify newly assigned officer
-    if target_officer:
-        notif = Notification(
-            user_id=target_officer.id,
-            title=f"Petition Assigned (REQ-{fdr_req.id:04d})",
-            message=f"You have been assigned to review {fdr_req.request_type} petition REQ-{fdr_req.id:04d} from {fdr_req.institution.name if fdr_req.institution else 'Institution'}.",
-            notification_type=NotificationType.INFO.value,
-            is_read=False,
+        from app.services.assignment_service import reassign_petition
+        success, msg, target_officer = reassign_petition(
+            fdr_req, officer_id, g.current_user, reason=reason, commit=True
         )
-        db.session.add(notif)
+        if not success:
+            status_code = 400
+            if "already assigned" in msg.lower():
+                status_code = 200  # Idempotent assignment
+            return jsonify({"error": msg, "code": "ASSIGNMENT_FAILED" if status_code != 200 else "OK", "data": fdr_req.to_dict()}), status_code
 
-    db.session.commit()
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": msg,
+                    "data": fdr_req.to_dict(),
+                }
+            ),
+            200,
+        )
+    else:
+        # Unassign petition
+        old_officer_id = fdr_req.assigned_to
+        fdr_req.assigned_to = None
 
-    return (
-        jsonify(
-            {
-                "success": True,
-                "message": f"Petition assigned successfully to {target_officer.full_name if target_officer else 'Unassigned'}.",
-                "data": fdr_req.to_dict(),
-            }
-        ),
-        200,
-    )
+        history = PetitionAssignmentHistory(
+            request_id=fdr_req.id,
+            previous_officer_id=old_officer_id,
+            new_officer_id=None,
+            assigned_by_id=g.current_user.id,
+            assignment_type="MANUAL_ASSIGNMENT",
+            reason=reason.strip() or "Deallocated by administrator.",
+        )
+        db.session.add(history)
+
+        audit = AuditLog(
+            user_id=g.current_user.id,
+            action="REQUEST_UNASSIGNED",
+            entity_type="FDRRequest",
+            entity_id=fdr_req.id,
+            details=f"Petition REQ-{fdr_req.id:04d} deallocated by {g.current_user.full_name}.",
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": f"Petition REQ-{fdr_req.id:04d} is now unassigned.",
+                    "data": fdr_req.to_dict(),
+                }
+            ),
+            200,
+        )
 
 
 @requests_bp.route("/<request_id>/claim", methods=["PATCH"])
@@ -1176,7 +1197,18 @@ def claim_request(request_id):
             409,
         )
 
+    prev_officer_id = fdr_req.assigned_to
     fdr_req.assigned_to = g.current_user.id
+
+    history = PetitionAssignmentHistory(
+        request_id=fdr_req.id,
+        previous_officer_id=prev_officer_id,
+        new_officer_id=g.current_user.id,
+        assigned_by_id=g.current_user.id,
+        assignment_type="SELF_CLAIM",
+        reason=f"Self-claimed from scrutiny queue by {g.current_user.full_name}.",
+    )
+    db.session.add(history)
 
     audit = AuditLog(
         user_id=g.current_user.id,
@@ -1198,6 +1230,36 @@ def claim_request(request_id):
         ),
         200,
     )
+
+
+@requests_bp.route("/<request_id>/assignment-history", methods=["GET"])
+@roles_required(UserRole.ADMIN, UserRole.AICTE_OFFICER)
+def get_request_assignment_history(request_id):
+    """Retrieve the immutable assignment and reassignment audit trail for a petition."""
+    numeric_id = parse_request_id(request_id)
+    if not numeric_id:
+        return jsonify({"error": "Petition request not found.", "code": "NOT_FOUND"}), 404
+
+    fdr_req = db.session.get(FDRRequest, numeric_id)
+    if not fdr_req:
+        return jsonify({"error": "Petition request not found.", "code": "NOT_FOUND"}), 404
+
+    history_records = fdr_req.assignment_history.all()
+    return jsonify({
+        "success": True,
+        "request_id": f"REQ-{fdr_req.id:04d}",
+        "data": [h.to_dict() for h in history_records],
+        "count": len(history_records),
+    }), 200
+
+
+@requests_bp.route("/auto-assign-unassigned", methods=["POST"])
+@roles_required(UserRole.ADMIN)
+def trigger_auto_assign_unassigned():
+    """Admin endpoint to automatically distribute all unassigned petitions across active officers."""
+    from app.services.assignment_service import auto_assign_all_unassigned_petitions
+    result = auto_assign_all_unassigned_petitions(g.current_user)
+    return jsonify(result), 200
 
 
 @requests_bp.route("/<request_id>/download", methods=["GET"])

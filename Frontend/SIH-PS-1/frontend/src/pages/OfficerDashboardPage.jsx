@@ -16,6 +16,8 @@ import {
   Inbox,
   FileCheck2,
   Sparkles,
+  ArrowRight,
+  Filter,
 } from 'lucide-react'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -29,32 +31,44 @@ import { useApp } from '../context/AppContext'
 import { dashboardService } from '../services/dashboardService'
 import { requestService } from '../services/requestService'
 
-export function PriorityBadge({ priority }) {
+export function PriorityBadge({ priority, reason }) {
   const p = (priority || 'LOW').toUpperCase()
-  if (p === 'URGENT') {
+  if (p === 'CRITICAL' || p === 'URGENT') {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+      <span
+        title={reason || 'FDR maturity within 7 days — Critical Statutory Priority'}
+        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-extrabold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs"
+      >
         <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
-        URGENT
+        CRITICAL
       </span>
     )
   }
   if (p === 'HIGH') {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+      <span
+        title={reason || 'FDR maturity within 15 days or Overdue — High Priority'}
+        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 text-amber-900 border border-amber-300"
+      >
         HIGH
       </span>
     )
   }
   if (p === 'MEDIUM') {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+      <span
+        title={reason || 'Standard scrutiny queue'}
+        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-blue-100 text-blue-800 border border-blue-200"
+      >
         MEDIUM
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+    <span
+      title={reason || 'Sufficient time remaining'}
+      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-medium bg-slate-100 text-slate-700 border border-slate-200"
+    >
       LOW
     </span>
   )
@@ -68,6 +82,8 @@ export function OfficerDashboardPage() {
   const [activeTab, setActiveTab] = useState('assigned') // 'assigned' | 'claimable'
 
   // Filter state for assigned cases
+  const [categoryFilter, setCategoryFilter] = useState('ALL') // 'ALL' | 'CRITICAL' | 'HIGH' | 'PENDING' | 'OVERDUE' | 'COMPLETED'
+  const [sortOrder, setSortOrder] = useState('PRIORITY') // 'PRIORITY' | 'MATURITY' | 'NEWEST' | 'OLDEST'
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -199,9 +215,32 @@ export function OfficerDashboardPage() {
   const assignedCases = dashboardData?.assigned_cases || []
   const claimableCases = dashboardData?.claimable_cases || []
 
-  // Filtered assigned cases
+  // Smart category counts
+  const categoryCounts = useMemo(() => {
+    let critical = 0
+    let high = 0
+    let pending = 0
+    let overdue = 0
+    let completed = 0
+
+    assignedCases.forEach((c) => {
+      const p = (c.priority || 'LOW').toUpperCase()
+      const st = (c.status || '').toLowerCase().trim()
+      const isOverdue = Boolean(c.is_overdue || c.isOverdue)
+
+      if (p === 'CRITICAL' || p === 'URGENT') critical++
+      if (p === 'HIGH') high++
+      if (['submitted', 'under review', 'resubmitted / awaiting review'].includes(st)) pending++
+      if (isOverdue) overdue++
+      if (['approved', 'rejected', 'closed'].includes(st)) completed++
+    })
+
+    return { critical, high, pending, overdue, completed }
+  }, [assignedCases])
+
+  // Filtered and sorted assigned cases
   const filteredAssignedCases = useMemo(() => {
-    return assignedCases.filter((c) => {
+    const list = assignedCases.filter((c) => {
       const q = searchQuery.toLowerCase().trim()
       const reqId = String(c.id || '').toLowerCase()
       const fdrNum = String(c.fdrNumber || c.fdr_number || '').toLowerCase()
@@ -217,38 +256,75 @@ export function OfficerDashboardPage() {
       const matchesStatus =
         statusFilter === 'ALL' || currentStatus === statusFilter.toLowerCase().trim()
 
+      const currentPriority = (c.priority || 'LOW').toUpperCase()
       const matchesPriority =
-        priorityFilter === 'ALL' || (c.priority || 'LOW').toUpperCase() === priorityFilter.toUpperCase()
+        priorityFilter === 'ALL' || currentPriority === priorityFilter.toUpperCase()
 
-      return matchesSearch && matchesType && matchesStatus && matchesPriority
+      // Category Filter (Requirement 3)
+      let matchesCategory = true
+      if (categoryFilter === 'CRITICAL') {
+        matchesCategory = currentPriority === 'CRITICAL' || currentPriority === 'URGENT'
+      } else if (categoryFilter === 'HIGH') {
+        matchesCategory = currentPriority === 'HIGH'
+      } else if (categoryFilter === 'PENDING') {
+        matchesCategory = ['submitted', 'under review', 'resubmitted / awaiting review'].includes(currentStatus)
+      } else if (categoryFilter === 'OVERDUE') {
+        matchesCategory = Boolean(c.is_overdue || c.isOverdue)
+      } else if (categoryFilter === 'COMPLETED') {
+        matchesCategory = ['approved', 'rejected', 'closed'].includes(currentStatus)
+      }
+
+      return matchesSearch && matchesType && matchesStatus && matchesPriority && matchesCategory
     })
-  }, [assignedCases, searchQuery, typeFilter, statusFilter, priorityFilter])
+
+    // Dynamic sorting
+    const priorityWeight = { CRITICAL: 0, URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+    return list.sort((a, b) => {
+      if (sortOrder === 'PRIORITY') {
+        const pa = priorityWeight[(a.priority || 'LOW').toUpperCase()] ?? 4
+        const pb = priorityWeight[(b.priority || 'LOW').toUpperCase()] ?? 4
+        if (pa !== pb) return pa - pb
+        // Secondary sort: days remaining ascending
+        return (a.days_remaining ?? 9999) - (b.days_remaining ?? 9999)
+      }
+      if (sortOrder === 'MATURITY') {
+        return (a.days_remaining ?? 9999) - (b.days_remaining ?? 9999)
+      }
+      if (sortOrder === 'NEWEST') {
+        return new Date(b.created_at || b.submissionDate || 0) - new Date(a.created_at || a.submissionDate || 0)
+      }
+      if (sortOrder === 'OLDEST') {
+        return new Date(a.created_at || a.submissionDate || 0) - new Date(b.created_at || b.submissionDate || 0)
+      }
+      return 0
+    })
+  }, [assignedCases, searchQuery, typeFilter, statusFilter, priorityFilter, categoryFilter, sortOrder])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Officer Welcome & Bureau Banner */}
-      <div className="bg-gradient-to-r from-[#142B4A] via-[#1A3C67] to-[#142B4A] rounded-2xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+      <div className="bg-[#0B1B3D] border border-[#1E3A63] rounded-xl p-5 sm:p-6 text-white shadow-subtle relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-12 -translate-y-8 w-72 h-72 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-medium border border-white/10">
-              <ShieldCheck className="w-3.5 h-3.5" />
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-white/10 text-amber-300 text-2xs font-bold uppercase tracking-wider border border-white/15">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>AICTE Desk Scrutiny Officer Workbench</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Welcome, {currentUser?.full_name || 'Scrutiny Officer'}
             </h1>
-            <p className="text-slate-200 text-sm leading-relaxed">
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
               Review and scrutinize statutory renewal and lien release petitions, inspect banking covenants, verify supporting documents, and issue regulatory decisions under AICTE Approval Process Handbook (APH) regulations.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <Button
               variant="secondary"
               size="md"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20"
+              className="bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/30"
               icon={RefreshCw}
               onClick={() => loadDashboard(true)}
             >
@@ -256,9 +332,9 @@ export function OfficerDashboardPage() {
             </Button>
             <Link to="/requests">
               <Button
-                variant="primary"
+                variant="warning"
                 size="md"
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold shadow-md border border-amber-400"
+                className="font-semibold shadow-xs"
               >
                 All Bureau Petitions
               </Button>
@@ -269,12 +345,14 @@ export function OfficerDashboardPage() {
 
       {/* Urgent Warning if Overdue or Approaching Maturity */}
       {workload.overdue_cases > 0 && (
-        <div className="flex items-center justify-between p-4 bg-rose-50 rounded-xl border border-rose-300 text-rose-950 text-xs sm:text-sm">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+        <div className="flex items-center justify-between p-3.5 sm:p-4 bg-rose-50 rounded-xl border border-rose-300 text-rose-950 text-xs sm:text-sm shadow-2xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 sm:mt-0" />
             <div>
-              <span className="font-bold">Overdue Caseload Notice:</span> You have{' '}
-              <span className="font-bold underline">{workload.overdue_cases} assigned petition(s)</span> pending review for more than 14 days. Prompt action is required to avoid regulatory SLA breaches.
+              <span className="font-bold">Overdue Caseload Notice: </span>
+              <span>
+                You have <span className="font-bold underline">{workload.overdue_cases} assigned petition(s)</span> pending review for more than 14 days. Prompt action is required to avoid regulatory SLA breaches.
+              </span>
             </div>
           </div>
           <button
@@ -282,7 +360,7 @@ export function OfficerDashboardPage() {
               setActiveTab('assigned')
               setPriorityFilter('URGENT')
             }}
-            className="shrink-0 ml-4 font-semibold text-rose-800 hover:text-rose-950 underline text-xs"
+            className="shrink-0 ml-4 font-semibold text-rose-800 hover:text-rose-950 underline text-xs whitespace-nowrap"
           >
             Filter Urgent Cases &rarr;
           </button>
@@ -290,93 +368,93 @@ export function OfficerDashboardPage() {
       )}
 
       {/* SECTION A: Personal Workload Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4.5">
         {/* Card 1: Awaiting Review */}
-        <Card className="p-4 border-slate-200 flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 hover:shadow-subtle transition-all">
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-2xs font-semibold text-slate-600 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Awaiting Scrutiny
               </span>
-              <span className="text-3xl font-bold text-slate-900 mt-1 block">
+              <span className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 block tabular-nums">
                 {workload.assigned_awaiting_review ?? 0}
               </span>
             </div>
-            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-700">
+            <div className="p-2.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/60">
               <Clock className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
+          <div className="mt-3 pt-3 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
             <span>Submitted & Under Review</span>
             <span className="font-semibold text-blue-700">Action Required</span>
           </div>
         </Card>
 
         {/* Card 2: Newly Assigned */}
-        <Card className="p-4 border-slate-200 flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 hover:shadow-subtle transition-all">
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-2xs font-semibold text-slate-600 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Newly Assigned (7d)
               </span>
-              <span className="text-3xl font-bold text-indigo-950 mt-1 block">
+              <span className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 block tabular-nums">
                 {workload.newly_assigned ?? 0}
               </span>
             </div>
-            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-700">
+            <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/60">
               <Inbox className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
+          <div className="mt-3 pt-3 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
             <span>Allocated recently</span>
-            <span className="font-semibold text-indigo-600">New Queue</span>
+            <span className="font-semibold text-indigo-700">New Queue</span>
           </div>
         </Card>
 
         {/* Card 3: Resubmitted / Corrections */}
-        <Card className="p-4 border-slate-200 flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 hover:shadow-subtle transition-all">
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-2xs font-semibold text-slate-600 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Resubmitted / Corrections
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl font-bold text-slate-900">
+                <span className="text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">
                   {workload.resubmitted_awaiting_review ?? 0}
                 </span>
                 <span className="text-2xs text-slate-400">
-                  ({workload.awaiting_institution_corrections ?? 0} awaiting college)
+                  ({workload.awaiting_institution_corrections ?? 0} at college)
                 </span>
               </div>
             </div>
-            <div className="p-2.5 rounded-xl bg-purple-50 text-purple-700">
+            <div className="p-2.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200/60">
               <FileCheck2 className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
+          <div className="mt-3 pt-3 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
             <span>Revised documents uploaded</span>
             <span className="font-semibold text-purple-700">Review Ready</span>
           </div>
         </Card>
 
         {/* Card 4: Approaching Maturity & Completed */}
-        <Card className="p-4 border-slate-200 flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 hover:shadow-subtle transition-all">
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-2xs font-semibold text-slate-600 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Expiring &lt;= 30 Days
               </span>
-              <span className="text-3xl font-bold text-amber-950 mt-1 block">
+              <span className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 block tabular-nums">
                 {workload.approaching_maturity ?? 0}
               </span>
             </div>
-            <div className="p-2.5 rounded-xl bg-amber-50 text-amber-700">
+            <div className="p-2.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
               <CalendarClock className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
+          <div className="mt-3 pt-3 border-t border-slate-100 text-2xs text-slate-500 flex items-center justify-between">
             <span>Resolved: {workload.approved_cases ?? 0} App / {workload.rejected_cases ?? 0} Rej</span>
-            <span className="font-semibold text-amber-700">Critical Term</span>
+            <span className="font-semibold text-amber-800">Critical Term</span>
           </div>
         </Card>
       </div>
@@ -385,9 +463,9 @@ export function OfficerDashboardPage() {
       <div className="flex border-b border-slate-200 gap-4">
         <button
           onClick={() => setActiveTab('assigned')}
-          className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'assigned'
-              ? 'border-[#142B4A] text-[#142B4A]'
+              ? 'border-navy-700 text-navy-800'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -397,9 +475,9 @@ export function OfficerDashboardPage() {
 
         <button
           onClick={() => setActiveTab('claimable')}
-          className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'claimable'
-              ? 'border-[#142B4A] text-[#142B4A]'
+              ? 'border-navy-700 text-navy-800'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -410,30 +488,148 @@ export function OfficerDashboardPage() {
 
       {/* SECTION B: My Assigned Cases */}
       {activeTab === 'assigned' && (
-        <Card className="p-5 border-slate-200">
+        <Card className="p-4 sm:p-5">
           <CardHeader
             title="My Assigned Scrutiny Cases"
             subtitle="Petitions allocated to your desk for documentary verification and regulatory clearance"
+            icon={UserCheck}
           />
 
+          {/* Workload Category Filters (Requirement 3) */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-3 pb-2 border-b border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'ALL'
+                  ? 'bg-[#0B1B3D] text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <span>My Assigned Petitions</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-800'
+              }`}>
+                {assignedCases.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('CRITICAL')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'CRITICAL'
+                  ? 'bg-rose-700 text-white shadow-xs'
+                  : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200/80'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+              <span>Critical Cases (&le;7d)</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'CRITICAL' ? 'bg-white/20 text-white' : 'bg-rose-200 text-rose-900'
+              }`}>
+                {categoryCounts.critical}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('HIGH')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'HIGH'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200/80'
+              }`}
+            >
+              <span>High Priority (&le;15d)</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'HIGH' ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-900'
+              }`}>
+                {categoryCounts.high}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('PENDING')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'PENDING'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200/80'
+              }`}
+            >
+              <span>Pending Review</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'PENDING' ? 'bg-white/20 text-white' : 'bg-blue-200 text-blue-900'
+              }`}>
+                {categoryCounts.pending}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('OVERDUE')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'OVERDUE'
+                  ? 'bg-purple-700 text-white shadow-xs'
+                  : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200/80'
+              }`}
+            >
+              <span>Overdue (&gt;14d)</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'OVERDUE' ? 'bg-white/20 text-white' : 'bg-purple-200 text-purple-900'
+              }`}>
+                {categoryCounts.overdue}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('COMPLETED')}
+              className={`px-3 py-1.5 rounded-lg text-2xs font-bold transition-all flex items-center gap-1.5 ${
+                categoryFilter === 'COMPLETED'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/80'
+              }`}
+            >
+              <span>Completed Cases</span>
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-3xs ${
+                categoryFilter === 'COMPLETED' ? 'bg-white/20 text-white' : 'bg-emerald-200 text-emerald-900'
+              }`}>
+                {categoryCounts.completed}
+              </span>
+            </button>
+          </div>
+
           {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 my-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 my-3.5">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by ID, FDR #, bank, or college..."
+                placeholder="Search by ID, FDR #, bank, or institution..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20 focus:border-[#142B4A] bg-white text-slate-900"
               />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              >
+                <option value="PRIORITY">Sort: Priority (Critical &rarr; Low)</option>
+                <option value="MATURITY">Sort: Days to Maturity (Asc)</option>
+                <option value="NEWEST">Sort: Newest Submissions</option>
+                <option value="OLDEST">Sort: Oldest Submissions</option>
+              </select>
+
+              <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-none"
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
               >
                 <option value="ALL">All Request Types</option>
                 <option value="Renewal">Renewal Only</option>
@@ -443,7 +639,7 @@ export function OfficerDashboardPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-none"
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="Submitted">Submitted</option>
@@ -457,10 +653,10 @@ export function OfficerDashboardPage() {
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                className="text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-none"
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
               >
                 <option value="ALL">All Priorities</option>
-                <option value="URGENT">Urgent Only</option>
+                <option value="CRITICAL">Critical Only</option>
                 <option value="HIGH">High Priority</option>
                 <option value="MEDIUM">Medium Priority</option>
                 <option value="LOW">Low Priority</option>
@@ -477,10 +673,10 @@ export function OfficerDashboardPage() {
               description="Check the Claimable Unassigned Petitions tab to pick up newly submitted petitions."
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50">
+                  <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50/70">
                     <th className="py-2.5 px-3">Petition ID</th>
                     <th className="py-2.5 px-3">Institution</th>
                     <th className="py-2.5 px-3">FDR Number</th>
@@ -499,10 +695,10 @@ export function OfficerDashboardPage() {
 
                     return (
                       <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-3 font-mono font-bold text-[#142B4A]">
+                        <td className="py-2.5 px-3 font-mono font-bold text-navy-800">
                           {c.id}
                         </td>
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <span className="font-semibold text-slate-900 block truncate max-w-[180px]">
                             {c.institutionName || c.institution_name || 'Technical College'}
                           </span>
@@ -510,12 +706,12 @@ export function OfficerDashboardPage() {
                             {c.institutionCode || c.institution_code || 'ID: 1-439281'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 font-mono text-slate-700">
+                        <td className="py-2.5 px-3 font-mono text-slate-700">
                           <div>{c.fdrNumber || c.fdr_number}</div>
                           <div className="text-2xs text-slate-400">{c.bankName || c.bank_name}</div>
                         </td>
-                        <td className="py-3 px-3">
-                          <div className="font-medium text-slate-800">
+                        <td className="py-2.5 px-3">
+                          <div className="font-medium text-slate-800 tabular-nums">
                             {formatDate(c.maturityDate || c.maturity_date)}
                           </div>
                           {days !== null && days !== undefined ? (
@@ -530,27 +726,27 @@ export function OfficerDashboardPage() {
                             <span className="text-2xs text-slate-400">Term N/A</span>
                           )}
                         </td>
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-2xs font-semibold ${
                               c.requestType === 'Release' || c.request_type === 'Release'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
+                                ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                                : 'bg-blue-50 text-blue-800 border border-blue-200'
                             }`}
                           >
                             {c.requestType || c.request_type}
                           </span>
                         </td>
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <RequestStatusBadge status={c.status} size="sm" />
                         </td>
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <PriorityBadge priority={c.priority} />
                         </td>
-                        <td className="py-3 px-3 text-2xs text-slate-500">
+                        <td className="py-2.5 px-3 text-2xs text-slate-500 tabular-nums">
                           {formatDate(c.submissionDate || c.created_at)}
                         </td>
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right">
                           <Button
                             variant="primary"
                             size="xs"
@@ -572,23 +768,24 @@ export function OfficerDashboardPage() {
 
       {/* SECTION C: Claimable Unassigned Petitions */}
       {activeTab === 'claimable' && (
-        <Card className="p-5 border-slate-200">
+        <Card className="p-4 sm:p-5">
           <CardHeader
             title="Available Unassigned Petitions"
             subtitle="Statutory requests submitted by institutions that have not yet been assigned to a scrutiny officer"
+            icon={Inbox}
           />
 
           {claimableCases.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-500">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
               <p className="font-semibold text-slate-800">Assignment Queue is Clear</p>
               <p className="text-slate-400 mt-0.5">All submitted statutory petitions are currently assigned to officers.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto mt-4">
+            <div className="overflow-x-auto mt-3 -mx-4 sm:mx-0">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50">
+                  <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50/70">
                     <th className="py-2.5 px-3">Petition ID</th>
                     <th className="py-2.5 px-3">Institution</th>
                     <th className="py-2.5 px-3">FDR Number</th>
@@ -603,40 +800,40 @@ export function OfficerDashboardPage() {
                 <tbody className="divide-y divide-slate-100">
                   {claimableCases.map((c) => (
                     <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-3 font-mono font-bold text-[#142B4A]">
+                      <td className="py-2.5 px-3 font-mono font-bold text-navy-800">
                         {c.id}
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 px-3">
                         <span className="font-semibold text-slate-900 block truncate max-w-[200px]">
                           {c.institutionName || c.institution_name || 'Technical College'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-mono text-slate-700">
+                      <td className="py-2.5 px-3 font-mono text-slate-700">
                         {c.fdrNumber || c.fdr_number}
                       </td>
-                      <td className="py-3 px-3 font-medium text-slate-900">
+                      <td className="py-2.5 px-3 font-bold text-slate-900 tabular-nums">
                         {formatCurrency(c.depositAmount || c.deposit_amount)}
                       </td>
-                      <td className="py-3 px-3">
-                        <div>{formatDate(c.maturityDate || c.maturity_date)}</div>
+                      <td className="py-2.5 px-3">
+                        <div className="tabular-nums">{formatDate(c.maturityDate || c.maturity_date)}</div>
                         <span className="text-2xs text-slate-500">
                           {c.daysRemaining !== null && c.daysRemaining !== undefined
                             ? `${c.daysRemaining} days left`
                             : ''}
                         </span>
                       </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded text-2xs font-semibold bg-blue-100 text-blue-800">
+                      <td className="py-2.5 px-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-2xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
                           {c.requestType || c.request_type}
                         </span>
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 px-3">
                         <PriorityBadge priority={c.priority} />
                       </td>
-                      <td className="py-3 px-3 text-2xs text-slate-500">
+                      <td className="py-2.5 px-3 text-2xs text-slate-500 tabular-nums">
                         {formatDate(c.submissionDate || c.created_at)}
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-2.5 px-3 text-right">
                         <Button
                           variant="secondary"
                           size="xs"
@@ -669,64 +866,100 @@ export function OfficerDashboardPage() {
               Loading petition dossier and regulatory history...
             </div>
           ) : (
-            <div className="space-y-5 text-xs text-slate-700">
+            <div className="space-y-4 text-xs text-slate-700">
               {/* Summary Dossier Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider block">
+                  <span className="text-2xs text-slate-500 uppercase tracking-wider block font-semibold">
                     Institution
                   </span>
-                  <span className="font-semibold text-slate-900 block truncate">
+                  <span className="font-semibold text-slate-900 block truncate mt-0.5">
                     {detailedCase?.institutionName || detailedCase?.institution_name || 'Technical College'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider block">
+                  <span className="text-2xs text-slate-500 uppercase tracking-wider block font-semibold">
                     FDR Reference
                   </span>
-                  <span className="font-mono font-bold text-slate-900 block">
+                  <span className="font-mono font-bold text-slate-900 block mt-0.5">
                     {detailedCase?.fdrNumber || detailedCase?.fdr_number}
                   </span>
                   <span className="text-2xs text-slate-400">{detailedCase?.bankName || detailedCase?.bank_name}</span>
                 </div>
                 <div>
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider block">
+                  <span className="text-2xs text-slate-500 uppercase tracking-wider block font-semibold">
                     Deposit Amount
                   </span>
-                  <span className="font-bold text-slate-900 block">
+                  <span className="font-bold text-slate-900 block mt-0.5 tabular-nums">
                     {formatCurrency(detailedCase?.depositAmount || detailedCase?.deposit_amount)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider block">
+                  <span className="text-2xs text-slate-500 uppercase tracking-wider block font-semibold">
                     Maturity Term
                   </span>
-                  <span className="font-semibold text-slate-900 block">
+                  <span className="font-semibold text-slate-900 block mt-0.5 tabular-nums">
                     {formatDate(detailedCase?.maturityDate || detailedCase?.maturity_date)}
                   </span>
-                  <PriorityBadge priority={detailedCase?.priority} />
+                  <div className="mt-1">
+                    <PriorityBadge priority={detailedCase?.priority} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Priority Justification Alert */}
+              <div
+                className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
+                  detailedCase?.priority === 'CRITICAL' || detailedCase?.priority === 'URGENT'
+                    ? 'bg-rose-50 border-rose-300 text-rose-950'
+                    : detailedCase?.priority === 'HIGH'
+                    ? 'bg-amber-50 border-amber-300 text-amber-950'
+                    : 'bg-slate-50 border-slate-200 text-slate-800'
+                }`}
+              >
+                <AlertCircle
+                  className={`w-4 h-4 shrink-0 mt-0.5 ${
+                    detailedCase?.priority === 'CRITICAL' || detailedCase?.priority === 'URGENT'
+                      ? 'text-rose-600'
+                      : detailedCase?.priority === 'HIGH'
+                      ? 'text-amber-600'
+                      : 'text-slate-500'
+                  }`}
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold uppercase tracking-wider text-2xs">
+                      SLA Dynamic Priority: {detailedCase?.priority}
+                    </span>
+                    <PriorityBadge priority={detailedCase?.priority} />
+                  </div>
+                  <p className="text-2xs leading-relaxed">
+                    {detailedCase?.priority_reason ||
+                      detailedCase?.priorityReason ||
+                      'Assigned under standard regulatory scrutiny turnaround.'}
+                  </p>
                 </div>
               </div>
 
               {/* Justification Provided by College */}
               <div>
-                <span className="text-2xs font-semibold uppercase text-slate-500 block mb-1">
+                <span className="text-2xs font-semibold uppercase text-slate-600 block mb-1">
                   Institutional Justification & Request Reason:
                 </span>
-                <div className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800 leading-relaxed font-sans">
+                <div className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800 leading-relaxed font-sans text-xs">
                   {detailedCase?.reason || 'No justification text provided by institution.'}
                 </div>
               </div>
 
               {/* Supporting Document & Attachment */}
-              <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="w-7 h-7 text-blue-700 shrink-0" />
+              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-6 h-6 text-navy-700 shrink-0" />
                   <div>
-                    <span className="font-semibold text-blue-950 block">
+                    <span className="font-semibold text-navy-950 block text-xs">
                       {detailedCase?.supportingDocument || detailedCase?.supporting_document || 'Supporting_Application.pdf'}
                     </span>
-                    <span className="text-2xs text-blue-700">
+                    <span className="text-2xs text-slate-500">
                       Mandatory statutory application and endorsement file
                     </span>
                   </div>
@@ -742,13 +975,13 @@ export function OfficerDashboardPage() {
                     )
                   }
                 >
-                  Download Attachment
+                  Download File
                 </Button>
               </div>
 
               {/* Submitted Renewed FDR Deposit Details (Awaiting Officer Verification) */}
               {(detailedCase?.renewal_fdr_number || detailedCase?.renewal_document || detailedCase?.status === 'Pending Verification') && (
-                <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-300 space-y-3">
+                <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-300 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-700" />
@@ -823,22 +1056,60 @@ export function OfficerDashboardPage() {
               {/* Audit / Decision History */}
               {detailedCase?.history && detailedCase.history.length > 0 && (
                 <div>
-                  <span className="text-2xs font-semibold uppercase text-slate-500 block mb-2">
+                  <span className="text-2xs font-semibold uppercase text-slate-500 block mb-1.5">
                     Scrutiny & Decision History:
                   </span>
-                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                     {detailedCase.history.map((h) => (
                       <div
                         key={h.id}
-                        className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between text-2xs"
+                        className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between text-2xs"
                       >
                         <div>
                           <span className="font-bold text-slate-900">{h.action}</span>
                           <span className="text-slate-500 ml-2">by {h.actor_name} ({h.actor_role})</span>
                           <p className="text-slate-600 mt-0.5">{h.details}</p>
                         </div>
-                        <span className="text-slate-400 font-mono shrink-0 ml-4">
+                        <span className="text-slate-400 font-mono shrink-0 ml-3">
                           {formatDate(h.timestamp)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Assignment & Allocation History */}
+              {detailedCase?.assignment_history && detailedCase.assignment_history.length > 0 && (
+                <div>
+                  <span className="text-2xs font-semibold uppercase text-slate-500 block mb-1.5">
+                    Officer Assignment & Allocation Trail ({detailedCase.assignment_history.length}):
+                  </span>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {detailedCase.assignment_history.map((ah) => (
+                      <div
+                        key={ah.id}
+                        className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between text-2xs"
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900">{ah.assignment_type}</span>
+                            <span className="text-slate-500 text-3xs">
+                              {ah.previous_officer_name ? `From ${ah.previous_officer_name} &rarr; ` : ''}
+                              To <strong>{ah.new_officer_name || 'Unassigned'}</strong>
+                            </span>
+                          </div>
+                          {ah.reason && (
+                            <p className="text-slate-600 mt-0.5 text-3xs italic">
+                              Note: {ah.reason}
+                            </p>
+                          )}
+                          <span className="text-3xs text-slate-400 block mt-0.5">
+                            By: {ah.assigned_by_name}
+                          </span>
+                        </div>
+                        <span className="text-slate-400 font-mono shrink-0 ml-3 text-3xs">
+                          {formatDate(ah.created_at)}
                         </span>
                       </div>
                     ))}
@@ -876,7 +1147,7 @@ export function OfficerDashboardPage() {
                     <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                       Current Decision Stage
                     </label>
-                    <div className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-100 text-slate-600">
+                    <div className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-100 text-slate-600 font-medium">
                       {detailedCase?.stage || 'AICTE Desk Scrutiny'}
                     </div>
                   </div>
@@ -898,7 +1169,7 @@ export function OfficerDashboardPage() {
                   />
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2">
+                <div className="flex justify-end gap-2.5 pt-2">
                   <Button
                     type="button"
                     variant="secondary"

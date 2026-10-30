@@ -139,14 +139,32 @@ export const requestService = {
   },
 
   /**
-   * Assign or reassign petition to an officer (Admin).
+   * Assign or reassign petition to an officer (Admin) with explicit justification reason.
    */
-  async assignRequest(requestId, officerId) {
+  async assignRequest(requestId, officerId, reason = '') {
     const cleanId = normalizeRequestId(requestId)
     const response = await apiClient.patch(`/requests/${cleanId}/assign`, {
       officer_id: officerId,
+      reason,
     })
     return response.data?.data
+  },
+
+  /**
+   * Fetch immutable assignment and reassignment audit history.
+   */
+  async getAssignmentHistory(requestId) {
+    const cleanId = normalizeRequestId(requestId)
+    const response = await apiClient.get(`/requests/${cleanId}/assignment-history`)
+    return response.data?.data || []
+  },
+
+  /**
+   * Admin trigger to automatically distribute all unassigned petitions.
+   */
+  async autoAssignUnassigned() {
+    const response = await apiClient.post('/requests/auto-assign-unassigned')
+    return response.data
   },
 
   /**

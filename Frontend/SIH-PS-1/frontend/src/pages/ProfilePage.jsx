@@ -9,6 +9,8 @@ import {
   Save,
   Shield,
   CheckCircle,
+  Loader2,
+  UserCheck,
 } from 'lucide-react'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -17,7 +19,6 @@ import { profileSchema } from '../schemas/profileSchema'
 import { formatDate } from '../utils/dateUtils'
 import { useApp } from '../context/AppContext'
 import { reportService } from '../services/reportService'
-import { Loader2 } from 'lucide-react'
 
 export function ProfilePage() {
   const { profile, currentUser, updateProfile, showToast } = useApp()
@@ -109,8 +110,10 @@ export function ProfilePage() {
         pincode: data.pincode,
       })
       reset(data)
-    } catch {
+      showToast('Institutional profile updated successfully.', 'success')
+    } catch (err) {
       console.error('Failed to update profile:', err)
+      showToast(err.message || 'Failed to update profile.', 'error')
     } finally {
       setIsSubmitting(false)
     }
@@ -154,8 +157,10 @@ export function ProfilePage() {
         full_name: officerName.trim(),
         adminName: officerName.trim(),
       })
+      showToast('Officer profile updated successfully.', 'success')
     } catch (err) {
       console.error('Failed to update officer profile:', err)
+      showToast(err.message || 'Failed to update profile.', 'error')
     } finally {
       setIsSubmitting(false)
     }
@@ -170,7 +175,7 @@ export function ProfilePage() {
   // --------------------------------------------------------------------------
   if (isOfficerOrAdmin) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             AICTE Official Profile & Bureau Credentials
@@ -181,48 +186,49 @@ export function ProfilePage() {
         </div>
 
         {/* Bureau Officer Banner */}
-        <Card className="bg-gradient-to-r from-[#142B4A] to-[#1E3A5F] text-white p-6">
+        <div className="bg-[#0B1B3D] border border-[#1E3A63] rounded-xl p-5 sm:p-6 text-white shadow-subtle relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-lg shrink-0">
-                <Shield className="w-6 h-6" />
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
+                <Shield className="w-5 h-5 text-navy-950" />
               </div>
               <div>
-                <h3 className="text-lg font-bold leading-tight">
+                <h3 className="text-base sm:text-lg font-bold leading-tight text-white">
                   {currentUser?.full_name || 'AICTE Officer'}
                 </h3>
-                <p className="text-xs text-slate-300 font-mono mt-1">
+                <p className="text-2xs sm:text-xs text-slate-300 font-mono mt-1">
                   Official Account: {currentUser?.email}
                 </p>
-                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-2xs font-semibold border border-blue-400/30">
-                  <CheckCircle className="w-3 h-3 text-blue-400" />
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-300 text-2xs font-semibold border border-white/15">
+                  <CheckCircle className="w-3 h-3 text-amber-400" />
                   <span>
                     {currentUser?.role === 'ADMIN'
-                      ? 'System Administrator'
-                      : 'Authorized Scrutiny Officer'}
+                      ? 'Central System Administrator'
+                      : 'Authorized Desk Scrutiny Officer'}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="text-right sm:border-l sm:border-white/10 sm:pl-6 text-2xs text-slate-300">
-              <span>Account Status:</span>
-              <p className="font-semibold text-emerald-300 text-xs mt-0.5">Active & Authorized</p>
+            <div className="text-left sm:text-right sm:border-l sm:border-white/10 sm:pl-6 text-2xs text-slate-300">
+              <span className="text-slate-400">Account Authorization:</span>
+              <p className="font-semibold text-emerald-400 text-xs mt-0.5">Active & In Good Standing</p>
               {currentUser?.last_login_at && (
-                <p className="text-2xs text-slate-400 mt-1">
+                <p className="text-2xs text-slate-400 mt-1 tabular-nums">
                   Last Login: {formatDate(currentUser.last_login_at)}
                 </p>
               )}
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Officer Details Form */}
-        <form onSubmit={onSubmitOfficer} className="space-y-6">
-          <Card>
+        <form onSubmit={onSubmitOfficer} className="space-y-5">
+          <Card className="p-4 sm:p-6">
             <CardHeader
               title="Official Identity & Credentials"
               subtitle="Registered regulatory identity in the AICTE FDR Scrutiny Division"
+              icon={UserCheck}
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -231,7 +237,7 @@ export function ProfilePage() {
                 required
                 value={officerName}
                 onChange={(e) => setOfficerName(e.target.value)}
-                helperText="Displayed on audit logs and regulatory approval certificates"
+                helperText="Displayed on audit logs and regulatory approval records"
               />
 
               <Input
@@ -257,25 +263,26 @@ export function ProfilePage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="p-4 sm:p-6">
             <CardHeader
               title="Security & Regulatory Compliance"
               subtitle="Auditing and accountability standards"
+              icon={ShieldCheck}
             />
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-navy-700 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
                 <p className="font-semibold text-slate-900">
                   Statutory Audit Compliance Notice
                 </p>
-                <p className="text-slate-500 leading-relaxed">
+                <p className="text-2xs text-slate-500 leading-relaxed">
                   All FDR workflow transitions, release approvals, and deficiency notices issued under your credentials are cryptographically stamped with your user ID and recorded in the permanent audit trail.
                 </p>
               </div>
             </div>
           </Card>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-1">
             <Button
               type="button"
               variant="secondary"
@@ -305,7 +312,7 @@ export function ProfilePage() {
   // INSTITUTION PROFILE VIEW
   // --------------------------------------------------------------------------
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
       {/* Header */}
       <div>
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
@@ -317,42 +324,43 @@ export function ProfilePage() {
       </div>
 
       {/* Institutional Read-Only Summary Banner */}
-      <Card className="bg-gradient-to-r from-[#142B4A] to-[#1E3A5F] text-white p-6">
+      <div className="bg-[#0B1B3D] border border-[#1E3A63] rounded-xl p-5 sm:p-6 text-white shadow-subtle relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-lg shrink-0">
-              <Building2 className="w-6 h-6" />
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
+              <Building2 className="w-5 h-5 text-navy-950" />
             </div>
             <div>
-              <h3 className="text-lg font-bold leading-tight">
+              <h3 className="text-base sm:text-lg font-bold leading-tight text-white">
                 {profile.collegeName || currentUser?.institution_name || 'Technical Institution'}
               </h3>
-              <p className="text-xs text-slate-300 font-mono mt-1">
+              <p className="text-2xs sm:text-xs text-slate-300 font-mono mt-1">
                 Permanent AICTE ID: {profile.aictePermanentId || currentUser?.institution_code || '1-4392817291'} • Session {profile.approvalYear || '2026-2027'}
               </p>
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-2xs font-semibold border border-emerald-400/30">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-300 text-2xs font-semibold border border-white/15">
+                <ShieldCheck className="w-3 h-3 text-amber-400" />
                 <span>AICTE Approved Technical Institution</span>
               </div>
             </div>
           </div>
 
-          <div className="text-right sm:border-l sm:border-white/10 sm:pl-6 text-2xs text-slate-300">
-            <span>Last Updated:</span>
-            <p className="font-mono text-white text-xs mt-0.5">
+          <div className="text-left sm:text-right sm:border-l sm:border-white/10 sm:pl-6 text-2xs text-slate-300">
+            <span className="text-slate-400">Last Records Audit:</span>
+            <p className="font-mono text-white text-xs mt-0.5 tabular-nums">
               {formatDate(profile.lastUpdated || '2026-10-18T10:30:00Z')}
             </p>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Editable Form */}
-      <form onSubmit={handleSubmit(onSubmitInstitution)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmitInstitution)} className="space-y-5">
         {/* Institution Details */}
-        <Card>
+        <Card className="p-4 sm:p-6">
           <CardHeader
             title="Institutional Information"
             subtitle="Official institutional title and regulatory identifiers"
+            icon={Building2}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -382,10 +390,11 @@ export function ProfilePage() {
         </Card>
 
         {/* Administrator Details */}
-        <Card>
+        <Card className="p-4 sm:p-6">
           <CardHeader
             title="Authorized College Administrator"
             subtitle="Primary contact officer authorized for FDR joint operations"
+            icon={UserCheck}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -433,10 +442,11 @@ export function ProfilePage() {
         </Card>
 
         {/* Location & Physical Address */}
-        <Card>
+        <Card className="p-4 sm:p-6">
           <CardHeader
             title="Campus Postal Address"
             subtitle="Campus location for formal regulatory correspondence"
+            icon={Building2}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -473,19 +483,20 @@ export function ProfilePage() {
         </Card>
 
         {/* Joint Lien Details (Read-only reference) */}
-        <Card>
+        <Card className="p-4 sm:p-6">
           <CardHeader
             title="Joint Account Endorsement"
             subtitle="Statutory joint signatory mapping"
+            icon={ShieldCheck}
           />
 
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-navy-700 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
               <p className="font-semibold text-slate-900">
-                Joint Lien Mapping: {profile.jointAccountDetails || 'Joint Account with Regional Officer, AICTE Northern Region'}
+                Joint Lien Signatory: {profile.jointAccountDetails || 'Joint Account with Regional Officer, AICTE Northern Region'}
               </p>
-              <p className="text-slate-500 leading-relaxed">
+              <p className="text-2xs text-slate-500 leading-relaxed">
                 All Fixed Deposit Receipts submitted under this profile must carry a verified lien endorsement in the joint names of the Institution and the designated AICTE Regional Officer.
               </p>
             </div>
@@ -493,7 +504,7 @@ export function ProfilePage() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between pt-1">
           <Button
             type="button"
             variant="secondary"
@@ -514,16 +525,18 @@ export function ProfilePage() {
           </Button>
         </div>
       </form>
+
       {/* Audit Trail & Regulatory Activity History */}
-      <Card>
+      <Card className="p-4 sm:p-6">
         <CardHeader
           title="Audit Trail & Regulatory History"
           subtitle="Immutable transaction events and administrative actions recorded under this account"
+          icon={ShieldCheck}
         />
 
         {auditLoading ? (
           <div className="py-8 flex items-center justify-center gap-2 text-slate-500 text-xs">
-            <Loader2 className="w-4 h-4 animate-spin text-[#142B4A]" />
+            <Loader2 className="w-4 h-4 animate-spin text-navy-700" />
             <span>Loading security audit records...</span>
           </div>
         ) : auditLogs.length === 0 ? (
@@ -531,10 +544,10 @@ export function ProfilePage() {
             No recent audit trail entries logged.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50">
+                <tr className="border-b border-slate-200 text-2xs uppercase text-slate-500 font-semibold bg-slate-50/70">
                   <th className="py-2.5 px-3">Timestamp</th>
                   <th className="py-2.5 px-3">Actor</th>
                   <th className="py-2.5 px-3">Action Event</th>
@@ -544,19 +557,19 @@ export function ProfilePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {auditLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">
+                  <tr key={log.id} className="hover:bg-slate-50/80">
+                    <td className="py-2.5 px-3 whitespace-nowrap text-slate-500 tabular-nums text-2xs">
                       {formatDate(log.created_at)}
                     </td>
                     <td className="py-2.5 px-3 font-medium text-slate-900">
                       {log.user_name || log.user_email || `User #${log.user_id || 'System'}`}
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
-                      <span className="font-mono px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800 font-semibold">
+                      <span className="font-mono px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800 font-semibold border border-slate-200">
                         {log.action}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-600">
+                    <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-600 text-2xs">
                       {log.target_type ? `${log.target_type} #${log.target_id || ''}` : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-slate-600">
@@ -572,3 +585,5 @@ export function ProfilePage() {
     </div>
   )
 }
+
+export default ProfilePage

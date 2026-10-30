@@ -35,49 +35,49 @@ export function UpcomingMaturitiesTable() {
       if (status === 'Submitted') {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            Renewal request submitted
+            Renewal submitted
           </span>
         )
       }
       if (status === 'Under Review') {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            Renewal request under review
+            Under review
           </span>
         )
       }
       if (status === 'Approved' && !hasReceipt) {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
-            Renewal request approved — upload renewed FDR receipt
+            Approved — upload receipt
           </span>
         )
       }
       if (status === 'Pending Verification' || (status === 'Approved' && hasReceipt)) {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">
-            Renewed receipt awaiting verification
+            Awaiting verification
           </span>
         )
       }
       if (status === 'Closed') {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-            Renewal verified — next maturity: {formatDate(fdr.maturityDate)}
+            Verified
           </span>
         )
       }
       if (status === 'Documents Required') {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-orange-50 text-orange-800 border border-orange-200">
-            Deficiency: Documents required
+            Deficiency notice
           </span>
         )
       }
       if (status === 'Rejected') {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
-            Renewal rejected
+            Rejected
           </span>
         )
       }
@@ -94,11 +94,12 @@ export function UpcomingMaturitiesTable() {
     <Card className="flex flex-col h-full">
       <CardHeader
         title="Upcoming Maturities"
-        subtitle="Fixed deposits maturing in the near future requiring renewal or release review"
+        subtitle="Fixed deposits maturing in the near term requiring renewal or release review"
+        icon={CalendarClock}
         action={
           <Link
             to="/fdrs"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#142B4A] hover:text-[#0E1E34] hover:underline"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 hover:text-navy-900 hover:underline"
           >
             <span>View All FDRs</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -109,24 +110,24 @@ export function UpcomingMaturitiesTable() {
       {upcomingMaturities.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
           <CalendarClock className="w-8 h-8 text-slate-400 mb-2" />
-          <p className="text-sm font-medium">No upcoming maturities within the next 30 days.</p>
-          <p className="text-xs text-slate-400 mt-1">All active FDRs are in compliance.</p>
+          <p className="text-xs sm:text-sm font-semibold text-slate-700">No upcoming maturities within 30 days.</p>
+          <p className="text-2xs sm:text-xs text-slate-500 mt-0.5">All active security receipts remain fully compliant.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto -mx-5 sm:mx-0">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/70">
-                <th className="py-2.5 px-4">FDR Ref #</th>
-                <th className="py-2.5 px-4">Bank Name</th>
-                <th className="py-2.5 px-4">Amount</th>
-                <th className="py-2.5 px-4">Maturity Date</th>
-                <th className="py-2.5 px-4">FDR Maturity Status</th>
-                <th className="py-2.5 px-4">Petition Status</th>
-                <th className="py-2.5 px-4 text-right">Action</th>
+              <tr className="border-b border-slate-200 text-2xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/70">
+                <th className="py-2.5 px-3 sm:px-4">FDR Ref #</th>
+                <th className="py-2.5 px-3 sm:px-4">Bank Name</th>
+                <th className="py-2.5 px-3 sm:px-4">Amount</th>
+                <th className="py-2.5 px-3 sm:px-4">Maturity Date</th>
+                <th className="py-2.5 px-3 sm:px-4">Status</th>
+                <th className="py-2.5 px-3 sm:px-4">Petition</th>
+                <th className="py-2.5 px-3 sm:px-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
+            <tbody className="divide-y divide-slate-100 text-xs">
               {upcomingMaturities.map((fdr) => {
                 const isUrgent = fdr.daysRemaining <= 15
 
@@ -134,47 +135,47 @@ export function UpcomingMaturitiesTable() {
                   <tr
                     key={fdr.id}
                     className={`hover:bg-slate-50/80 transition-colors ${
-                      isUrgent ? 'bg-amber-50/40' : ''
+                      isUrgent ? 'bg-amber-50/30' : ''
                     }`}
                   >
-                    <td className="py-3 px-4 font-mono font-medium text-slate-900 text-xs">
+                    <td className="py-2.5 px-3 sm:px-4 font-mono font-medium text-slate-900 text-xs">
                       {fdr.fdrNumber}
                     </td>
-                    <td className="py-3 px-4 text-slate-700 text-xs font-medium">
+                    <td className="py-2.5 px-3 sm:px-4 text-slate-700 font-medium">
                       {fdr.bankName}
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900 text-xs">
+                    <td className="py-2.5 px-3 sm:px-4 font-bold text-slate-900 tabular-nums">
                       {formatCurrency(fdr.depositAmount)}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 text-xs whitespace-nowrap">
+                    <td className="py-2.5 px-3 sm:px-4 text-slate-600 tabular-nums whitespace-nowrap">
                       {formatDate(fdr.maturityDate)}
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-2.5 px-3 sm:px-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold ${
                           fdr.daysRemaining <= 10
                             ? 'bg-rose-100 text-rose-800 border border-rose-200'
                             : fdr.daysRemaining <= 30
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-slate-100 text-slate-700 border border-slate-200'
                         }`}
                       >
                         {fdr.daysRemaining <= 15 && (
-                          <AlertCircle className="w-3 h-3 text-amber-600" />
+                          <AlertCircle className="w-3 h-3 text-amber-700 shrink-0" />
                         )}
-                        Maturity in {fdr.daysRemaining} days
+                        {fdr.daysRemaining} days left
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-2.5 px-3 sm:px-4 whitespace-nowrap">
                       {renderPetitionStatus(fdr)}
                     </td>
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <td className="py-2.5 px-3 sm:px-4 text-right whitespace-nowrap">
                       <Link
                         to={`/fdrs/${fdr.id}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#142B4A] hover:bg-[#142B4A]/10 rounded-md transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium text-navy-700 hover:bg-navy-50 rounded border border-slate-200 transition-colors"
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Details</span>
+                        <Eye className="w-3 h-3" />
+                        <span>View</span>
                       </Link>
                     </td>
                   </tr>
@@ -188,3 +189,4 @@ export function UpcomingMaturitiesTable() {
   )
 }
 
+export default UpcomingMaturitiesTable

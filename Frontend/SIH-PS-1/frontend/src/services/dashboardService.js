@@ -66,6 +66,14 @@ export const dashboardService = {
     })
     return response.data?.data || response.data
   },
+
+  /**
+   * Trigger the automated watchdog scanner for critical and overdue petitions.
+   */
+  async scanAlerts() {
+    const response = await apiClient.post('/dashboard/scan-alerts')
+    return response.data
+  },
 }
 
 export default dashboardService

@@ -75,6 +75,13 @@ class Config:
     BANK_CERT_PATH = os.getenv("BANK_CERT_PATH", "").strip()
     BANK_ENVIRONMENT = os.getenv("BANK_ENVIRONMENT", "sandbox").lower().strip()
 
+    # Petition Workload & Smart Auto-Assignment Configuration
+    AUTO_ASSIGN_PETITIONS = os.getenv("AUTO_ASSIGN_PETITIONS", "True").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
     # SMTP Email Notification Configuration (Gmail SMTP or Custom Gateway)
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com").strip()
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
@@ -113,6 +120,11 @@ class TestingConfig(Config):
     SESSION_COOKIE_SECURE = False
     MAIL_SUPPRESS_SEND = True
     SCHEDULER_ENABLED = False
+    AUTO_ASSIGN_PETITIONS = os.getenv("AUTO_ASSIGN_PETITIONS", "False").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
     UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads"
     REQUEST_UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads" / "requests"
     SQLALCHEMY_DATABASE_URI = os.getenv(

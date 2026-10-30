@@ -140,6 +140,13 @@ def ensure_schema_updates(engine=None) -> list[str]:
     from app.models.renewal_history import FDRRenewalHistory
     from app.models.bank_verification import BankVerificationLog
     from app.models.email_log import EmailNotificationLog
+    from app.models.fdr_request import PetitionAssignmentHistory
+
+    # Safely create petition_assignment_histories table if absent
+    if "petition_assignment_histories" not in existing_tables:
+        PetitionAssignmentHistory.__table__.create(engine, checkfirst=True)
+        created.append("petition_assignment_histories")
+        logger.info("Migrated schema: created petition_assignment_histories table")
 
     # Safely create fdr_renewal_history table if absent
     if "fdr_renewal_history" not in existing_tables:

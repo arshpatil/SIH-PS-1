@@ -143,7 +143,7 @@ def test_complete_petition_lifecycle_and_dashboards(client, workflow_env):
     petition_raw_id = create_data["data"]["raw_id"]
     petition_str_id = create_data["data"]["id"]
     assert petition_str_id.startswith("REQ-")
-    assert create_data["data"]["priority"] in ("URGENT", "HIGH")
+    assert create_data["data"]["priority"] in ("URGENT", "HIGH", "MEDIUM", "CRITICAL")
     assert create_data["data"]["maturity_date"] is not None
 
     # 2. Institution checks its own request history

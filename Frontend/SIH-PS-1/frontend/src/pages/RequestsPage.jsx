@@ -14,6 +14,7 @@ import {
   History,
   FileSpreadsheet,
   AlertTriangle,
+  Filter,
 } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -84,6 +85,7 @@ export function RequestsPage() {
 
   // Case Assignment state (Admin)
   const [assignOfficerId, setAssignOfficerId] = useState('')
+  const [assignReason, setAssignReason] = useState('')
   const [isAssigning, setIsAssigning] = useState(false)
 
   const isOfficerOrAdmin =
@@ -226,7 +228,6 @@ export function RequestsPage() {
       })
       showToast('Rectified documents and response submitted successfully.', 'success')
       if (refreshRequests) await refreshRequests()
-      // Refresh detail view
       const updated = await requestService.getRequestDetail(rawId)
       setDetailedRequest(updated)
       setSelectedRequest((prev) => ({ ...prev, status: 'Resubmitted / Awaiting Review' }))
@@ -281,8 +282,9 @@ export function RequestsPage() {
     const rawId = selectedRequest?.raw_id || selectedRequest?.id
     setIsAssigning(true)
     try {
-      await requestService.assignRequest(rawId, assignOfficerId)
+      await requestService.assignRequest(rawId, assignOfficerId, assignReason)
       showToast('Petition successfully assigned to scrutiny officer.', 'success')
+      setAssignReason('')
       if (refreshRequests) await refreshRequests()
       const updated = await requestService.getRequestDetail(rawId)
       setDetailedRequest(updated)
@@ -331,7 +333,7 @@ export function RequestsPage() {
   const activeReq = detailedRequest || selectedRequest
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -346,6 +348,7 @@ export function RequestsPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
             variant="secondary"
+            size="md"
             icon={FileSpreadsheet}
             loading={exportingCsv}
             onClick={handleExportCSV}
@@ -355,11 +358,13 @@ export function RequestsPage() {
 
           {!isOfficerOrAdmin && (
             <Button
-              variant="primary"
+              variant="warning"
+              size="md"
               icon={PlusCircle}
+              className="font-semibold shadow-xs"
               onClick={() => setNewModalOpen(true)}
             >
-              Create New Request
+              Petition Renewal / Release
             </Button>
           )}
         </div>
@@ -367,19 +372,20 @@ export function RequestsPage() {
 
       {/* Overdue Escalation Banner if any pending > 14 days */}
       {overdueCount > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-amber-50 rounded-xl border border-amber-300 text-amber-950 text-xs sm:text-sm shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 bg-amber-50 rounded-xl border border-amber-300 text-amber-950 text-xs sm:text-sm shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-amber-100 text-amber-800">
               <Clock className="w-5 h-5 text-amber-700 animate-pulse" />
             </div>
             <div>
-              <span className="font-bold">Overdue Bureau Backlog:</span> {overdueCount} statutory petition(s) have been pending review for over 14 days without final decision.
+              <span className="font-bold">Overdue Bureau Backlog: </span>
+              <span>{overdueCount} statutory petition(s) have been pending review for over 14 days without final decision.</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setShowOverdueOnly(!showOverdueOnly)}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-200/80 hover:bg-amber-300 font-semibold text-amber-900 text-xs transition-colors"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-200/90 hover:bg-amber-300 font-semibold text-amber-900 text-xs transition-colors whitespace-nowrap"
           >
             {showOverdueOnly ? 'Show All Petitions' : 'Filter Overdue (>14 Days)'}
           </button>
@@ -387,16 +393,16 @@ export function RequestsPage() {
       )}
 
       {/* Filter Bar */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+      <Card className="p-3.5 sm:p-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-center">
           <div className="md:col-span-5 relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search by Request ID, FDR Number, or Bank..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             />
           </div>
 
@@ -404,7 +410,7 @@ export function RequestsPage() {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
               <option value="ALL">All Petition Types</option>
               <option value="Renewal">Renewal Petitions</option>
@@ -416,7 +422,7 @@ export function RequestsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
               {ALL_REQUEST_STATUSES.map((st) => (
                 <option key={st} value={st}>
@@ -429,9 +435,9 @@ export function RequestsPage() {
               type="button"
               onClick={() => setShowOverdueOnly(!showOverdueOnly)}
               title="Toggle Overdue >14d"
-              className={`px-3 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
                 showOverdueOnly
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
                   : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
               }`}
             >
@@ -449,40 +455,40 @@ export function RequestsPage() {
             <EmptyState
               title="No renewal or release requests match your criteria"
               description="You can file a new request for any active or maturing institutional fixed deposit."
-              actionLabel={!isOfficerOrAdmin ? "Create New Request" : undefined}
+              actionLabel={!isOfficerOrAdmin ? "Petition Renewal / Release" : undefined}
               onAction={!isOfficerOrAdmin ? () => setNewModalOpen(true) : undefined}
             />
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-50">
-                  <th className="py-3 px-5">Petition ID</th>
-                  {isOfficerOrAdmin && <th className="py-3 px-5">Institution</th>}
-                  <th className="py-3 px-5">Related FDR</th>
-                  <th className="py-3 px-5">Type</th>
-                  <th className="py-3 px-5">Deposit Amount</th>
-                  <th className="py-3 px-5">Priority</th>
-                  <th className="py-3 px-5">Submitted Date</th>
-                  <th className="py-3 px-5">Lifecycle Status</th>
-                  <th className="py-3 px-5 text-right">Actions</th>
+                <tr className="border-b border-slate-200 text-2xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/70">
+                  <th className="py-2.5 px-4">Petition ID</th>
+                  {isOfficerOrAdmin && <th className="py-2.5 px-4">Institution</th>}
+                  <th className="py-2.5 px-4">Related FDR</th>
+                  <th className="py-2.5 px-4">Type</th>
+                  <th className="py-2.5 px-4">Deposit Amount</th>
+                  <th className="py-2.5 px-4">Priority</th>
+                  <th className="py-2.5 px-4">Submitted Date</th>
+                  <th className="py-2.5 px-4">Lifecycle Status</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
+              <tbody className="divide-y divide-slate-100">
                 {filteredRequests.map((req) => {
                   const isReqOverdue = checkIsOverdue(req)
                   return (
                     <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-semibold text-slate-900 text-xs">
+                          <span className="font-mono font-bold text-navy-800 text-xs">
                             {req.id}
                           </span>
                           {isReqOverdue && (
                             <span
                               title="Overdue (>14 days pending)"
-                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300"
                             >
                               Overdue
                             </span>
@@ -490,7 +496,7 @@ export function RequestsPage() {
                         </div>
                       </td>
                       {isOfficerOrAdmin && (
-                        <td className="py-4 px-5">
+                        <td className="py-3 px-4">
                           <span className="font-semibold text-slate-900 block text-xs truncate max-w-[180px]">
                             {req.institutionName || req.institution_name || 'Technical College'}
                           </span>
@@ -499,42 +505,42 @@ export function RequestsPage() {
                           </span>
                         </td>
                       )}
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-4">
                         <Link
                           to={`/fdrs/${req.fdrId || req.fdr_id}`}
-                          className="font-mono text-xs font-semibold text-[#142B4A] hover:underline"
+                          className="font-mono text-xs font-semibold text-navy-800 hover:underline"
                         >
                           {req.fdrNumber || req.fdr_number}
                         </Link>
                         <p className="text-2xs text-slate-500 mt-0.5">{req.bankName || req.bank_name}</p>
                       </td>
-                      <td className="py-4 px-5 whitespace-nowrap">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold ${
                             (req.requestType || req.request_type) === 'Renewal'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-purple-100 text-purple-800'
+                              ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                              : 'bg-purple-50 text-purple-800 border border-purple-200'
                           }`}
                         >
                           {req.requestType || req.request_type}
                         </span>
                       </td>
-                      <td className="py-4 px-5 font-bold text-slate-900 text-xs">
+                      <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                         {formatCurrency(req.depositAmount || req.deposit_amount)}
                       </td>
-                      <td className="py-4 px-5 whitespace-nowrap">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <PriorityBadge priority={req.priority} />
                       </td>
-                      <td className="py-4 px-5 text-xs text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap tabular-nums">
                         {formatDate(req.submissionDate || req.created_at)}
                       </td>
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-4">
                         <RequestStatusBadge status={req.status} size="sm" />
                       </td>
-                      <td className="py-4 px-5 text-right whitespace-nowrap">
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
                         <Button
                           variant="secondary"
-                          size="sm"
+                          size="xs"
                           icon={Eye}
                           onClick={() => handleOpenDetail(req)}
                         >
@@ -554,27 +560,27 @@ export function RequestsPage() {
       <Modal
         isOpen={newModalOpen}
         onClose={() => setNewModalOpen(false)}
-        title="Submit New Renewal or Release Request"
+        title="Submit New Renewal or Release Petition"
         subtitle="Forwarded to AICTE Regional Bureau Scrutiny Committee"
         maxWidth="max-w-xl"
       >
-        <form onSubmit={handleCreateRequest} className="space-y-4">
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-blue-900 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-[#142B4A] shrink-0 mt-0.5" />
-            <span>
-              Official institutional petition for term renewal or lien release. All submissions are formally logged and audited by the AICTE Regional Bureau.
+        <form onSubmit={handleCreateRequest} className="space-y-4 text-xs text-slate-700">
+          <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-blue-950 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-navy-700 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              Official institutional petition for term renewal or lien release. All submissions are formally logged and audited under AICTE statutory procedures.
             </span>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+            <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
               Select Related FDR <span className="text-rose-500">*</span>
             </label>
             <select
               required
               value={selectedFdrId}
               onChange={(e) => setSelectedFdrId(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             >
               <option value="">Choose an eligible FDR record...</option>
               {eligibleFDRs.map((fdr) => (
@@ -586,15 +592,15 @@ export function RequestsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+            <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
               Request Type <span className="text-rose-500">*</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label
-                className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer text-xs font-semibold ${
+                className={`flex items-center justify-center p-2.5 rounded-lg border cursor-pointer text-xs font-semibold ${
                   requestType === 'Renewal'
-                    ? 'border-[#142B4A] bg-[#142B4A]/5 text-[#142B4A]'
-                    : 'border-slate-200 bg-white text-slate-600'
+                    ? 'border-navy-700 bg-navy-50 text-navy-900 shadow-2xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <input
@@ -609,10 +615,10 @@ export function RequestsPage() {
               </label>
 
               <label
-                className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer text-xs font-semibold ${
+                className={`flex items-center justify-center p-2.5 rounded-lg border cursor-pointer text-xs font-semibold ${
                   requestType === 'Release'
-                    ? 'border-[#142B4A] bg-[#142B4A]/5 text-[#142B4A]'
-                    : 'border-slate-200 bg-white text-slate-600'
+                    ? 'border-navy-700 bg-navy-50 text-navy-900 shadow-2xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <input
@@ -629,36 +635,36 @@ export function RequestsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+            <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
               Justification & Compliance Notes <span className="text-rose-500">*</span>
             </label>
             <textarea
               required
-              rows={4}
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="State the institutional justification, validity dates, or regulatory reasons for this renewal/release request..."
-              className="w-full p-3 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+              className="w-full p-2.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
             />
           </div>
 
           {/* Supporting Document */}
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">
+            <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
               Attach Supporting Undertaking / Bank Letter
             </label>
             <input
               type="file"
               accept=".pdf,.png,.jpg,.jpeg"
               onChange={(e) => setSupportingFile(e.target.files?.[0] || null)}
-              className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+              className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-2xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 border border-slate-200 rounded-lg p-1 bg-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <Button
               variant="secondary"
-              size="md"
+              size="sm"
               disabled={isSubmitting}
               onClick={() => setNewModalOpen(false)}
             >
@@ -667,10 +673,10 @@ export function RequestsPage() {
             <Button
               type="submit"
               variant="primary"
-              size="md"
+              size="sm"
               loading={isSubmitting}
             >
-              Submit Request
+              Submit Petition
             </Button>
           </div>
         </form>
@@ -688,72 +694,83 @@ export function RequestsPage() {
           subtitle={`${selectedRequest.requestType || selectedRequest.request_type} Petition for ${selectedRequest.fdrNumber || selectedRequest.fdr_number}`}
           maxWidth="max-w-2xl"
         >
-          <div className="space-y-5 text-xs max-h-[80vh] overflow-y-auto pr-1">
+          <div className="space-y-4 text-xs max-h-[80vh] overflow-y-auto pr-1">
             {detailLoading && (
               <div className="flex items-center justify-center py-4 text-slate-500 gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[#142B4A]" />
+                <Loader2 className="w-4 h-4 animate-spin text-navy-700" />
                 <span>Loading latest petition audit trail...</span>
               </div>
             )}
 
             {/* Status and Officer Bar */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200 gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 gap-3">
               <div>
-                <span className="text-slate-400 block font-medium">Lifecycle Status</span>
-                <div className="mt-1">
+                <span className="text-slate-500 block text-2xs font-semibold uppercase tracking-wider">Lifecycle Status</span>
+                <div className="mt-1 flex items-center gap-2">
                   <RequestStatusBadge status={activeReq?.status} />
+                  {activeReq?.priority && (
+                    <PriorityBadge
+                      priority={activeReq?.priority}
+                      reason={activeReq?.priority_reason || activeReq?.priorityReason}
+                    />
+                  )}
                 </div>
               </div>
               <div className="sm:text-right">
-                <span className="text-slate-400 block font-medium">Assigned Scrutiny Officer</span>
-                <span className="font-semibold text-slate-800">
+                <span className="text-slate-500 block text-2xs font-semibold uppercase tracking-wider">Assigned Scrutiny Officer</span>
+                <span className="font-semibold text-slate-900 mt-0.5 block">
                   {activeReq?.assigned_officer?.full_name || (activeReq?.assigned_to ? `Officer #${activeReq.assigned_to}` : 'Unassigned (Bureau Pool)')}
                 </span>
+                {(activeReq?.priority_reason || activeReq?.priorityReason) && (
+                  <span className="text-2xs text-slate-500 mt-0.5 block italic max-w-xs sm:ml-auto">
+                    {activeReq?.priority_reason || activeReq?.priorityReason}
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Metadata Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2 border-y border-slate-100">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-2 border-y border-slate-100">
               <div>
-                <span className="text-slate-400 font-medium block">Related FDR</span>
+                <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Related FDR</span>
                 <Link
                   to={`/fdrs/${activeReq?.fdrId || activeReq?.fdr_id}`}
-                  className="font-mono font-bold text-[#142B4A] hover:underline"
+                  className="font-mono font-bold text-navy-800 hover:underline mt-0.5 block"
                 >
                   {activeReq?.fdrNumber || activeReq?.fdr_number}
                 </Link>
               </div>
 
               <div>
-                <span className="text-slate-400 font-medium block">Deposit Amount</span>
-                <span className="font-bold text-slate-800">
+                <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Deposit Amount</span>
+                <span className="font-bold text-slate-900 mt-0.5 block tabular-nums">
                   {formatCurrency(activeReq?.depositAmount || activeReq?.deposit_amount)}
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-400 font-medium block">Submitted Date</span>
-                <span className="text-slate-700">
+                <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Submitted Date</span>
+                <span className="text-slate-700 mt-0.5 block tabular-nums">
                   {formatDate(activeReq?.submissionDate || activeReq?.created_at)}
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-400 font-medium block">Overdue Status</span>
+                <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">SLA Compliance</span>
                 {checkIsOverdue(activeReq) ? (
-                  <span className="text-rose-600 font-bold">Overdue (&gt;14 days)</span>
+                  <span className="text-rose-700 font-bold mt-0.5 block">Overdue (&gt;14 days)</span>
                 ) : (
-                  <span className="text-emerald-700 font-medium">Within SLA</span>
+                  <span className="text-emerald-700 font-semibold mt-0.5 block">Within SLA</span>
                 )}
               </div>
             </div>
 
             {/* Justification */}
             <div>
-              <span className="text-slate-500 font-semibold uppercase tracking-wider block mb-1">
+              <span className="text-slate-600 font-semibold uppercase tracking-wider text-2xs block mb-1">
                 Institutional Justification
               </span>
-              <p className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-slate-700 leading-relaxed">
+              <p className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 leading-relaxed text-xs">
                 {activeReq?.reason}
               </p>
             </div>
@@ -761,12 +778,12 @@ export function RequestsPage() {
             {/* Supporting Document */}
             {(activeReq?.supportingDocument || activeReq?.supporting_document) && (
               <div>
-                <span className="text-slate-500 font-semibold uppercase tracking-wider block mb-1">
+                <span className="text-slate-600 font-semibold uppercase tracking-wider text-2xs block mb-1">
                   Attached Statutory Document
                 </span>
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-white">
                   <div className="flex items-center gap-2 truncate">
-                    <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                    <FileText className="w-4 h-4 text-navy-700 shrink-0" />
                     <span className="font-medium text-slate-800 truncate">
                       {activeReq?.supportingDocument || activeReq?.supporting_document}
                     </span>
@@ -775,16 +792,16 @@ export function RequestsPage() {
                     type="button"
                     disabled={downloadingId === activeReq?.id}
                     onClick={() => handleDownloadAttachment(activeReq)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#142B4A]/10 text-[#142B4A] hover:bg-[#142B4A]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-2xs font-semibold rounded-md bg-navy-50 text-navy-800 hover:bg-navy-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2"
                   >
                     {downloadingId === activeReq?.id ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="w-3 h-3 animate-spin" />
                         <span>Downloading...</span>
                       </>
                     ) : (
                       <>
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-3 h-3" />
                         <span>Download</span>
                       </>
                     )}
@@ -795,12 +812,12 @@ export function RequestsPage() {
 
             {/* Resubmission Section: for Institution when Documents Required */}
             {!isOfficerOrAdmin && (activeReq?.status === 'Documents Required') && (
-              <form onSubmit={handleResubmit} className="p-4 rounded-xl border border-rose-300 bg-rose-50/50 space-y-3">
+              <form onSubmit={handleResubmit} className="p-3.5 rounded-xl border border-rose-300 bg-rose-50/50 space-y-2.5">
                 <div className="flex items-center gap-2 text-rose-800 font-bold">
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
                   <span>Rectified Documents Submission Required</span>
                 </div>
-                <p className="text-xs text-rose-700">
+                <p className="text-2xs text-rose-700 leading-relaxed">
                   The AICTE Scrutiny Officer flagged missing or deficient documentation for this petition. Please upload the requested revised undertaking or clarification letter.
                 </p>
 
@@ -810,11 +827,11 @@ export function RequestsPage() {
                   </label>
                   <textarea
                     required
-                    rows={3}
+                    rows={2}
                     value={resubmitRemarks}
                     onChange={(e) => setResubmitRemarks(e.target.value)}
-                    placeholder="Describe how the deficiency was addressed (e.g., uploaded updated bank confirmation letter)..."
-                    className="w-full p-2.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                    placeholder="Describe how the deficiency was addressed..."
+                    className="w-full p-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
                   />
                 </div>
 
@@ -826,7 +843,7 @@ export function RequestsPage() {
                     type="file"
                     accept=".pdf,.png,.jpg,.jpeg"
                     onChange={(e) => setResubmitFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-white file:text-slate-700 hover:file:bg-slate-100 border border-slate-200 rounded-lg p-1 bg-white"
+                    className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-2xs file:font-semibold file:bg-white file:text-slate-700 hover:file:bg-slate-100 border border-slate-200 rounded-lg p-1 bg-white"
                   />
                 </div>
 
@@ -846,13 +863,13 @@ export function RequestsPage() {
 
             {/* Officer Scrutiny Action Section */}
             {isOfficerOrAdmin && (
-              <form onSubmit={handleOfficerUpdateStatus} className="p-4 rounded-xl border border-slate-300 bg-slate-50 space-y-3">
+              <form onSubmit={handleOfficerUpdateStatus} className="p-3.5 rounded-xl border border-slate-300 bg-slate-50 space-y-2.5">
                 <div className="flex items-center gap-2 text-slate-900 font-bold">
-                  <UserCheck className="w-4 h-4 text-[#142B4A]" />
+                  <UserCheck className="w-4 h-4 text-navy-700" />
                   <span>Officer Scrutiny & Bureau Action</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
                     <label className="block text-2xs font-semibold uppercase text-slate-700 mb-1">
                       Target Decision Status <span className="text-rose-500">*</span>
@@ -861,7 +878,7 @@ export function RequestsPage() {
                       required
                       value={officerStatus}
                       onChange={(e) => setOfficerStatus(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
                     >
                       <option value="">Select Bureau Decision...</option>
                       <option value="Under Review">Under Review</option>
@@ -881,7 +898,7 @@ export function RequestsPage() {
                       value={officerRemarks}
                       onChange={(e) => setOfficerRemarks(e.target.value)}
                       placeholder="Enter scrutiny notes or specific deficiency reason..."
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
                     />
                   </div>
                 </div>
@@ -902,29 +919,82 @@ export function RequestsPage() {
 
             {/* Admin Case Assignment Section */}
             {isAdmin && (
-              <form onSubmit={handleAssignOfficer} className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-indigo-700" />
-                  <span className="font-semibold text-indigo-950 text-xs">Assign Scrutiny Officer ID:</span>
+              <form onSubmit={handleAssignOfficer} className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-indigo-700" />
+                    <span className="font-semibold text-indigo-950 text-xs">Officer Workload Allocation & Reassignment</span>
+                  </div>
+                  {activeReq?.assigned_to && (
+                    <span className="text-2xs font-mono text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded font-semibold">
+                      Current Assignee: #{activeReq.assigned_to}
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
                     type="number"
-                    placeholder="Officer User ID"
+                    placeholder="Officer User ID *"
                     value={assignOfficerId}
                     onChange={(e) => setAssignOfficerId(e.target.value)}
-                    className="w-32 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                    required
                   />
+                  <input
+                    type="text"
+                    placeholder="Allocation reason / transfer justification..."
+                    value={assignReason}
+                    onChange={(e) => setAssignReason(e.target.value)}
+                    className="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#142B4A]/20"
+                  />
+                </div>
+                <div className="flex justify-end pt-0.5">
                   <Button
                     type="submit"
                     variant="secondary"
                     size="sm"
                     loading={isAssigning}
                   >
-                    Assign
+                    Confirm Officer Assignment
                   </Button>
                 </div>
               </form>
+            )}
+
+            {/* Officer Assignment & Workload Transfer History */}
+            {isOfficerOrAdmin && activeReq?.assignment_history && activeReq.assignment_history.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-indigo-950 font-bold mb-2">
+                  <UserCheck className="w-4 h-4 text-indigo-600" />
+                  <span>Officer Assignment & Workload Allocation Trail</span>
+                </div>
+                <div className="space-y-2 border-l-2 border-indigo-200 pl-3 ml-2">
+                  {activeReq.assignment_history.map((ah, idx) => (
+                    <div key={idx} className="relative pb-1">
+                      <div className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-700 ring-4 ring-white" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xs font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 uppercase tracking-wide">
+                          {ah.assignment_type || 'ASSIGNMENT'}
+                        </span>
+                        <span className="text-2xs text-slate-400 tabular-nums">
+                          {formatDate(ah.created_at)}
+                        </span>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-800 mt-0.5">
+                        {ah.previous_officer_name ? `${ah.previous_officer_name} → ` : ''}{ah.new_officer_name || `Officer #${ah.new_officer_id}`}
+                        <span className="font-normal text-slate-500 ml-1">
+                          (by {ah.assigned_by_name || (ah.assigned_by_id ? `Admin #${ah.assigned_by_id}` : 'System Auto-Engine')})
+                        </span>
+                      </div>
+                      {ah.reason && (
+                        <p className="text-2xs text-slate-600 mt-0.5 bg-slate-50 p-2 rounded border border-slate-100">
+                          {ah.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Structured Audit & History Timeline */}
@@ -937,16 +1007,16 @@ export function RequestsPage() {
               {activeReq?.history && activeReq.history.length > 0 ? (
                 <div className="space-y-2 border-l-2 border-slate-200 pl-3 ml-2">
                   {activeReq.history.map((ev, idx) => (
-                    <div key={idx} className="relative pb-2">
-                      <div className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-[#142B4A] ring-4 ring-white" />
-                      <div className="text-2xs text-slate-400 font-medium">
+                    <div key={idx} className="relative pb-1">
+                      <div className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-navy-800 ring-4 ring-white" />
+                      <div className="text-2xs text-slate-400 font-medium tabular-nums">
                         {formatDate(ev.created_at)}
                       </div>
                       <div className="text-xs font-semibold text-slate-800">
                         {ev.action} {ev.to_status ? `→ ${ev.to_status}` : ''}
                       </div>
                       {ev.remarks && (
-                        <p className="text-2xs text-slate-600 mt-0.5 bg-slate-50 p-2 rounded border border-slate-100">
+                        <p className="text-2xs text-slate-600 mt-0.5 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
                           {ev.remarks}
                         </p>
                       )}
@@ -954,13 +1024,13 @@ export function RequestsPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-2xs text-slate-500 italic p-3 bg-slate-50 rounded-lg">
+                <div className="text-2xs text-slate-500 italic p-2.5 bg-slate-50 rounded-lg">
                   Initial submission registered on {formatDate(activeReq?.submissionDate || activeReq?.created_at)}. Awaiting additional audit history entries.
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-slate-100">
+            <div className="flex justify-end pt-2 border-t border-slate-100">
               <Button
                 variant="secondary"
                 size="sm"

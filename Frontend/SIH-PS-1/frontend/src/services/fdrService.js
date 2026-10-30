@@ -169,12 +169,61 @@ export const fdrService = {
   },
 
   /**
-   * AICTE Officer records verification decision on supporting document.
+   * AICTE Officer records verification decision on supporting document and/or individual fields.
    */
-  async verifyDocumentDecision(fdrId, docId, decision, remarks = '') {
-    const response = await apiClient.post(`/fdr/${fdrId}/documents/${docId}/verify`, {
-      decision,
-      remarks,
+  async verifyDocumentDecision(fdrId, docId, decision = null, remarks = '', fieldReviews = null) {
+    const payload = {}
+    if (decision) payload.decision = decision
+    if (remarks !== undefined && remarks !== null) payload.remarks = remarks
+    if (fieldReviews) payload.field_reviews = fieldReviews
+    const response = await apiClient.post(`/fdr/${fdrId}/documents/${docId}/verify`, payload)
+    return response.data
+  },
+
+  /**
+   * Get available synthetic document test scenarios (dev/demo only).
+   */
+  async getSyntheticScenarios(fdrId) {
+    const response = await apiClient.get(`/fdr/${fdrId}/synthetic-documents/scenarios`)
+    return response.data
+  },
+
+  /**
+   * Download a synthetic FDR test document for testing OCR verification.
+   */
+  async downloadSyntheticDocument(fdrId, scenarioId = 'MATCHING_FDR', format = 'pdf') {
+    const response = await apiClient.get(`/fdr/${fdrId}/synthetic-documents/download`, {
+      params: { scenario: scenarioId, format },
+      responseType: 'blob',
+    })
+    let filename = `DEMO_${scenarioId}.${format === 'image' ? 'png' : 'pdf'}`
+    const disposition = response.headers['content-disposition']
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      if (match && match[1]) {
+        filename = match[1]
+      }
+    }
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type'] || 'application/octet-stream',
+    })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    return { success: true, filename }
+  },
+
+  /**
+   * Directly generate, upload and process a synthetic test document on the FDR (dev/demo only).
+   */
+  async loadSyntheticDocument(fdrId, scenarioId = 'MATCHING_FDR', format = 'pdf') {
+    const response = await apiClient.post(`/fdr/${fdrId}/synthetic-documents/load`, {
+      scenario: scenarioId,
+      format,
     })
     return response.data
   },

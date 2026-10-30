@@ -99,6 +99,13 @@ class FDRRequest(db.Model):
         "User",
         foreign_keys=[renewal_verified_by],
     )
+    assignment_history = db.relationship(
+        "PetitionAssignmentHistory",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+        order_by="PetitionAssignmentHistory.created_at.desc()",
+    )
 
     @property
     def maturity_date(self):
@@ -112,43 +119,69 @@ class FDRRequest(db.Model):
         return (mat_d - datetime.now(timezone.utc).date()).days
 
     @property
+    def is_overdue(self) -> bool:
+        if not self.created_at:
+            return False
+        created_dt = self.created_at if self.created_at.tzinfo else self.created_at.replace(tzinfo=timezone.utc)
+        pending_days = (datetime.now(timezone.utc) - created_dt).days
+        return pending_days > 14 and self.status in [
+            "Submitted",
+            "Under Review",
+            "Documents Required",
+            "Resubmitted / Awaiting Review",
+        ]
+
+    @property
     def priority(self) -> str:
         days = self.days_remaining
-        is_overdue = False
-        if self.created_at:
+        if self.status in ["Approved", "Rejected", "Closed"]:
+            return "LOW"
+
+        # 1. CRITICAL: FDR maturity within 7 days (or already matured)
+        if days is not None and days <= 7:
+            return "CRITICAL"
+
+        # 2. HIGH: FDR maturity within 15 days or petition overdue (>14 days)
+        if (days is not None and days <= 15) or self.is_overdue:
+            return "HIGH"
+
+        # 3. MEDIUM: Normal pending petitions (e.g. maturity within 60 days, or standard pending)
+        if days is not None and days <= 60:
+            return "MEDIUM"
+
+        # 4. LOW: Recently submitted petitions with sufficient time remaining
+        return "LOW"
+
+    @property
+    def priority_reason(self) -> str:
+        days = self.days_remaining
+        if self.status in ["Approved", "Rejected", "Closed"]:
+            return f"Petition review completed and finalized ({self.status})."
+
+        if days is not None and days < 0:
+            return f"CRITICAL: FDR matured {abs(days)} day(s) ago. Immediate regulatory intervention mandatory."
+        if days is not None and days <= 7:
+            return f"CRITICAL: FDR matures in {days} day(s) (within 7-day critical window). Urgent scrutiny required."
+
+        if self.is_overdue:
             created_dt = self.created_at if self.created_at.tzinfo else self.created_at.replace(tzinfo=timezone.utc)
             pending_days = (datetime.now(timezone.utc) - created_dt).days
-            if pending_days > 14 and self.status in [
-                "Submitted",
-                "Under Review",
-                "Documents Required",
-                "Resubmitted / Awaiting Review",
-            ]:
-                is_overdue = True
+            return f"HIGH: Petition pending review for {pending_days} days (exceeds 14-day statutory turnaround limit)."
+        if days is not None and days <= 15:
+            return f"HIGH: FDR matures in {days} day(s) (within 15-day expedited review threshold)."
 
-        if (days is not None and days <= 15) or is_overdue:
-            return "URGENT"
-        elif days is not None and days <= 30:
-            return "HIGH"
-        elif days is not None and days <= 60:
-            return "MEDIUM"
-        return "LOW"
+        if days is not None and days <= 60:
+            return f"MEDIUM: Normal desk scrutiny queue ({days} day(s) remaining before FDR maturity)."
+
+        return f"LOW: Recently submitted petition with adequate regulatory time remaining ({days if days is not None else 'N/A'} days)."
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
     def to_dict(self) -> dict:
-        is_overdue = False
-        if self.created_at:
-            created_dt = self.created_at if self.created_at.tzinfo else self.created_at.replace(tzinfo=timezone.utc)
-            pending_days = (datetime.now(timezone.utc) - created_dt).days
-            if pending_days > 14 and self.status in [
-                "Submitted",
-                "Under Review",
-                "Documents Required",
-                "Resubmitted / Awaiting Review",
-            ]:
-                is_overdue = True
+        is_overdue = self.is_overdue
+        priority_val = self.priority
+        priority_reason_val = self.priority_reason
 
         return {
             "id": f"REQ-{self.id:04d}",
@@ -191,8 +224,11 @@ class FDRRequest(db.Model):
             "maturity_date": self.fdr.maturity_date.isoformat() if self.fdr and self.fdr.maturity_date else None,
             "daysRemaining": self.days_remaining,
             "days_remaining": self.days_remaining,
-            "priority": self.priority,
+            "priority": priority_val,
+            "priority_reason": priority_reason_val,
+            "priorityReason": priority_reason_val,
             "is_overdue": is_overdue,
+            "isOverdue": is_overdue,
             "renewalFdrNumber": self.renewal_fdr_number,
             "renewal_fdr_number": self.renewal_fdr_number,
             "renewalIssueDate": self.renewal_issue_date.isoformat() if self.renewal_issue_date else None,
@@ -223,3 +259,82 @@ class FDRRequest(db.Model):
 
     def __repr__(self) -> str:
         return f"<FDRRequest id={self.id} fdr_id={self.fdr_id} type='{self.request_type}' status='{self.status}'>"
+
+
+class PetitionAssignmentHistory(db.Model):
+    """Immutable audit trail for petition scrutiny officer assignments and reassignments."""
+
+    __tablename__ = "petition_assignment_histories"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    request_id = db.Column(
+        db.Integer,
+        db.ForeignKey("fdr_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    previous_officer_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    new_officer_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assigned_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assignment_type = db.Column(
+        db.String(32), nullable=False, default="AUTO_ASSIGNMENT", index=True
+    )  # "AUTO_ASSIGNMENT", "MANUAL_ASSIGNMENT", "REASSIGNMENT", "SELF_CLAIM"
+    reason = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    # Relationships
+    request = db.relationship("FDRRequest", back_populates="assignment_history")
+    previous_officer = db.relationship("User", foreign_keys=[previous_officer_id])
+    new_officer = db.relationship("User", foreign_keys=[new_officer_id])
+    assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "requestId": f"REQ-{self.request_id:04d}",
+            "request_id": self.request_id,
+            "previousOfficerId": self.previous_officer_id,
+            "previous_officer_id": self.previous_officer_id,
+            "previousOfficerName": self.previous_officer.full_name if self.previous_officer else None,
+            "previous_officer_name": self.previous_officer.full_name if self.previous_officer else None,
+            "newOfficerId": self.new_officer_id,
+            "new_officer_id": self.new_officer_id,
+            "newOfficerName": self.new_officer.full_name if self.new_officer else None,
+            "new_officer_name": self.new_officer.full_name if self.new_officer else None,
+            "assignedById": self.assigned_by_id,
+            "assigned_by_id": self.assigned_by_id,
+            "assignedByName": self.assigned_by.full_name if self.assigned_by else "System Auto-Assignment",
+            "assigned_by_name": self.assigned_by.full_name if self.assigned_by else "System Auto-Assignment",
+            "assignmentType": self.assignment_type,
+            "assignment_type": self.assignment_type,
+            "reason": self.reason,
+            "createdAt": self.created_at.isoformat() if self.created_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<PetitionAssignmentHistory id={self.id} req={self.request_id} prev={self.previous_officer_id} new={self.new_officer_id}>"
+

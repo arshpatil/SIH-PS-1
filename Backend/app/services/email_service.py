@@ -11,7 +11,7 @@ Features:
 - Respects testing and suppression flags (MAIL_SUPPRESS_SEND / TESTING).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
@@ -26,6 +26,7 @@ from app.models.email_log import EmailNotificationLog
 from app.models.fdr import FDRRecord
 from app.models.fdr_request import FDRRequest
 from app.models.institution import Institution
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -1373,4 +1374,331 @@ def retry_email_notification(log_id: int) -> tuple[bool, str]:
         reminder_interval_days=log.reminder_interval_days,
     )
     return success, "Email delivered successfully via SMTP." if success else "SMTP retry failed."
+
+
+def is_assignment_email_already_sent(
+    request_id: int, officer_email: str, email_type: str = "PETITION_ASSIGNED", window_minutes: int = 15
+) -> bool:
+    """Check if an assignment email for this request and officer was already sent recently."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    existing = EmailNotificationLog.query.filter(
+        EmailNotificationLog.request_id == request_id,
+        EmailNotificationLog.recipient_email == officer_email.strip().lower(),
+        EmailNotificationLog.email_type == email_type,
+        EmailNotificationLog.created_at >= cutoff,
+        EmailNotificationLog.status == "SENT",
+    ).first()
+    return existing is not None
+
+
+def send_petition_assignment_email(
+    fdr_request: FDRRequest,
+    officer: User,
+    is_reassignment: bool = False,
+    reason: str = "",
+    previous_officer: Optional[User] = None,
+) -> bool:
+    """
+    Deliver formal statutory email notification to the assigned AICTE scrutiny officer.
+    Prevents duplicate dispatches within 15 minutes.
+    """
+    if not officer or not officer.email or not is_valid_email(officer.email):
+        return False
+
+    email_type = "PETITION_REASSIGNED" if is_reassignment else "PETITION_ASSIGNED"
+    if is_assignment_email_already_sent(fdr_request.id, officer.email, email_type=email_type):
+        logger.info(
+            "Skipping duplicate %s email for REQ-%04d to %s",
+            email_type,
+            fdr_request.id,
+            officer.email,
+        )
+        return False
+
+    fdr = fdr_request.fdr
+    institution = fdr_request.institution
+    req_code = f"REQ-{fdr_request.id:04d}"
+    fdr_no = fdr.fdr_number if fdr else "N/A"
+    bank_title = fdr.bank_name if fdr else "N/A"
+    inst_title = institution.name if institution else "Educational Institution"
+
+    subject_prefix = "REASSIGNMENT NOTICE" if is_reassignment else "NEW CASE ALLOCATION"
+    subject = f"[AICTE SD-CELL] {subject_prefix}: {fdr_request.request_type} Petition {req_code} ({fdr_no})"
+
+    action_text = "reassigned to your scrutiny queue" if is_reassignment else "allocated to you for desk scrutiny"
+    reason_line = f"Administrative Allocation Note: {reason}" if reason else "Allocated via AICTE Smart Workload Distribution."
+
+    body_text = (
+        f"OFFICIAL AICTE CASE ALLOCATION ADVISORY\n\n"
+        f"Dear {officer.full_name},\n\n"
+        f"Statutory petition {req_code} for FDR {fdr_no} ({bank_title}) from {inst_title} has been {action_text}.\n\n"
+        f"Case Priority: {fdr_request.priority}\n"
+        f"Priority Justification: {fdr_request.priority_reason}\n"
+        f"Petition Type: {fdr_request.request_type}\n"
+        f"{reason_line}\n\n"
+        f"Please log in to the AICTE FDR Scrutiny Workbench to review supporting banking covenants and issue a regulatory decision.\n\n"
+        f"Portal: https://aicte.gov.in/sd-fdr/requests\n\n"
+        f"AICTE Security Deposit & FDR Monitoring Cell"
+    )
+
+    key_details = [
+        ("Petition ID", req_code),
+        ("FDR Number", fdr_no),
+        ("Bank Name", bank_title),
+        ("Institution", inst_title),
+        ("Petition Type", fdr_request.request_type),
+        ("Assigned Priority", fdr_request.priority),
+        ("Priority Justification", fdr_request.priority_reason),
+    ]
+    if is_reassignment and previous_officer:
+        key_details.append(("Previous Officer", previous_officer.full_name))
+    if reason:
+        key_details.append(("Allocation Reason", reason))
+
+    message_paragraphs = [
+        f"This is an official communication from the AICTE Security Deposit & FDR Monitoring Cell. "
+        f"A statutory petition has been <strong>{action_text}</strong>.",
+        f"<strong>Priority Level:</strong> <span style='color: {'#DC2626' if fdr_request.priority == 'CRITICAL' else '#D97706'}; font-weight: bold;'>{fdr_request.priority}</span> — {fdr_request.priority_reason}",
+        "Under AICTE Approval Process Handbook (APH) regulations, timely scrutiny is required to maintain institutional security compliance.",
+    ]
+
+    body_html = _build_html_template(
+        title=f"AICTE Case Allocation: {req_code}",
+        preheader=f"Petition {req_code} allocated to your scrutiny queue.",
+        institution_name=inst_title,
+        key_details=key_details,
+        message_paragraphs=message_paragraphs,
+        action_button=("Open Officer Workbench", "http://localhost:3000/officer-dashboard"),
+    )
+
+    return send_email(
+        to_email=officer.email,
+        subject=subject,
+        body_text=body_text,
+        body_html=body_html,
+        email_type=email_type,
+        fdr_id=fdr.id if fdr else None,
+        request_id=fdr_request.id,
+        institution_id=institution.id if institution else None,
+    )
+
+
+def send_petition_critical_escalation_alert(
+    fdr_request: FDRRequest,
+    officer: User,
+) -> bool:
+    """
+    Deliver urgent statutory alert to the assigned officer when a petition reaches CRITICAL status.
+    Deduplicated: Max 1 alert per 24 hours per request.
+    """
+    if not officer or not officer.email or not is_valid_email(officer.email):
+        return False
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    existing = EmailNotificationLog.query.filter(
+        EmailNotificationLog.request_id == fdr_request.id,
+        EmailNotificationLog.recipient_email == officer.email.strip().lower(),
+        EmailNotificationLog.email_type == "PETITION_CRITICAL_ALERT",
+        EmailNotificationLog.created_at >= cutoff,
+        EmailNotificationLog.status == "SENT",
+    ).first()
+    if existing:
+        return False
+
+    req_code = f"REQ-{fdr_request.id:04d}"
+    fdr = fdr_request.fdr
+    fdr_no = fdr.fdr_number if fdr else "N/A"
+    days = fdr_request.days_remaining
+
+    subject = f"[URGENT SLA ALERT] CRITICAL Petition {req_code} — FDR {fdr_no} Approaching Maturity ({days}d remaining)"
+
+    body_text = (
+        f"CRITICAL SLA ESCALATION NOTICE\n\n"
+        f"Dear {officer.full_name},\n\n"
+        f"Petition {req_code} for FDR {fdr_no} has reached CRITICAL priority ({days} days remaining before deposit maturity).\n\n"
+        f"Immediate scrutiny and regulatory determination are required to prevent security deposit lapse.\n\n"
+        f"Reason: {fdr_request.priority_reason}\n\n"
+        f"AICTE Security Deposit & FDR Monitoring Cell"
+    )
+
+    key_details = [
+        ("Petition ID", req_code),
+        ("FDR Number", fdr_no),
+        ("Days to Maturity", f"{days} days" if days is not None else "Matured"),
+        ("Priority", "CRITICAL"),
+        ("Urgency Note", fdr_request.priority_reason),
+    ]
+
+    message_paragraphs = [
+        f"This is an urgent automated escalation alert. Case <strong>{req_code}</strong> has entered the "
+        f"<span style='color: #DC2626; font-weight: bold;'>CRITICAL SLA WINDOW</span>.",
+        f"<strong>Condition:</strong> {fdr_request.priority_reason}",
+        "Please conduct desk scrutiny immediately or request administrative re-routing if unavailable.",
+    ]
+
+    body_html = _build_html_template(
+        title=f"CRITICAL SLA ALERT: {req_code}",
+        preheader=f"Immediate review mandatory: {days} days before FDR maturity.",
+        institution_name=fdr_request.institution.name if fdr_request.institution else "Institution",
+        key_details=key_details,
+        message_paragraphs=message_paragraphs,
+        action_button=("Review Urgent Case", "http://localhost:3000/officer-dashboard"),
+    )
+
+    return send_email(
+        to_email=officer.email,
+        subject=subject,
+        body_text=body_text,
+        body_html=body_html,
+        email_type="PETITION_CRITICAL_ALERT",
+        fdr_id=fdr.id if fdr else None,
+        request_id=fdr_request.id,
+        institution_id=fdr_request.institution_id,
+    )
+
+
+def send_petition_overdue_escalation_alert(
+    fdr_request: FDRRequest,
+    officer: User,
+) -> bool:
+    """
+    Deliver overdue escalation alert when a petition has been pending in queue for > 14 days.
+    Deduplicated: Max 1 alert per 24 hours.
+    """
+    if not officer or not officer.email or not is_valid_email(officer.email):
+        return False
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    existing = EmailNotificationLog.query.filter(
+        EmailNotificationLog.request_id == fdr_request.id,
+        EmailNotificationLog.recipient_email == officer.email.strip().lower(),
+        EmailNotificationLog.email_type == "PETITION_OVERDUE_ALERT",
+        EmailNotificationLog.created_at >= cutoff,
+        EmailNotificationLog.status == "SENT",
+    ).first()
+    if existing:
+        return False
+
+    req_code = f"REQ-{fdr_request.id:04d}"
+    fdr = fdr_request.fdr
+    fdr_no = fdr.fdr_number if fdr else "N/A"
+
+    subject = f"[OVERDUE ESCALATION] Petition {req_code} for FDR {fdr_no} Exceeds 14-Day Turnaround SLA"
+
+    body_text = (
+        f"STATUTORY OVERDUE NOTICE\n\n"
+        f"Dear {officer.full_name},\n\n"
+        f"Petition {req_code} (FDR {fdr_no}) has been pending scrutiny for more than 14 days without final disposition.\n\n"
+        f"Reason: {fdr_request.priority_reason}\n\n"
+        f"AICTE Security Deposit & FDR Monitoring Cell"
+    )
+
+    key_details = [
+        ("Petition ID", req_code),
+        ("FDR Number", fdr_no),
+        ("Turnaround Status", "OVERDUE (> 14 days)"),
+        ("Current Status", fdr_request.status),
+        ("Escalation Reason", fdr_request.priority_reason),
+    ]
+
+    message_paragraphs = [
+        f"Statutory petition <strong>{req_code}</strong> has breached the AICTE standard 14-day turnaround window.",
+        "Regulatory compliance requires prompt issuance of approval, deficiency return, or formal rejection.",
+    ]
+
+    body_html = _build_html_template(
+        title=f"OVERDUE ESCALATION: {req_code}",
+        preheader=f"Petition {req_code} exceeds 14-day statutory SLA window.",
+        institution_name=fdr_request.institution.name if fdr_request.institution else "Institution",
+        key_details=key_details,
+        message_paragraphs=message_paragraphs,
+        action_button=("Process Overdue Case", "http://localhost:3000/officer-dashboard"),
+    )
+
+    return send_email(
+        to_email=officer.email,
+        subject=subject,
+        body_text=body_text,
+        body_html=body_html,
+        email_type="PETITION_OVERDUE_ALERT",
+        fdr_id=fdr.id if fdr else None,
+        request_id=fdr_request.id,
+        institution_id=fdr_request.institution_id,
+    )
+
+
+def send_admin_unattended_critical_alert(
+    fdr_request: FDRRequest,
+    admin_users: list[User],
+) -> bool:
+    """
+    Alert Central Bureau Administrators about unattended or unassigned CRITICAL petitions.
+    Deduplicated: Max 1 dispatch per 24 hours.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    existing = EmailNotificationLog.query.filter(
+        EmailNotificationLog.request_id == fdr_request.id,
+        EmailNotificationLog.email_type == "ADMIN_UNATTENDED_CRITICAL_ALERT",
+        EmailNotificationLog.created_at >= cutoff,
+        EmailNotificationLog.status == "SENT",
+    ).first()
+    if existing:
+        return False
+
+    req_code = f"REQ-{fdr_request.id:04d}"
+    fdr = fdr_request.fdr
+    fdr_no = fdr.fdr_number if fdr else "N/A"
+    days = fdr_request.days_remaining
+
+    subject = f"[ADMIN WATCHDOG ALERT] Unattended Critical Petition {req_code} (FDR {fdr_no}, {days}d to maturity)"
+
+    body_text = (
+        f"CENTRAL ADMIN ESCALATION WATCHDOG\n\n"
+        f"Critical petition {req_code} for FDR {fdr_no} ({fdr_request.institution.name if fdr_request.institution else 'Institution'}) "
+        f"is currently UNASSIGNED or UNATTENDED with only {days} days before maturity.\n\n"
+        f"Immediate administrative intervention or manual officer allocation is required.\n\n"
+        f"AICTE Security Deposit & FDR Monitoring Cell"
+    )
+
+    key_details = [
+        ("Petition ID", req_code),
+        ("FDR Number", fdr_no),
+        ("Days Remaining", f"{days} days" if days is not None else "Matured"),
+        ("Allocation Status", "UNASSIGNED / UNATTENDED"),
+        ("Urgency", fdr_request.priority_reason),
+    ]
+
+    message_paragraphs = [
+        f"The Central Admin SLA Watchdog has detected an unattended case: <strong>{req_code}</strong>.",
+        f"<strong>Status:</strong> Critical FDR maturity threshold reached with no active scrutiny progression.",
+        "Please use the Central Admin Workload Dashboard to assign this petition immediately.",
+    ]
+
+    body_html = _build_html_template(
+        title=f"ADMIN WATCHDOG: Unattended {req_code}",
+        preheader=f"Unattended critical petition {req_code} requires administrative assignment.",
+        institution_name=fdr_request.institution.name if fdr_request.institution else "Institution",
+        key_details=key_details,
+        message_paragraphs=message_paragraphs,
+        action_button=("Open Admin Queue", "http://localhost:3000/admin-dashboard"),
+    )
+
+    sent_any = False
+    for admin in admin_users:
+        if admin.email and is_valid_email(admin.email):
+            sent = send_email(
+                to_email=admin.email,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html,
+                email_type="ADMIN_UNATTENDED_CRITICAL_ALERT",
+                fdr_id=fdr.id if fdr else None,
+                request_id=fdr_request.id,
+                institution_id=fdr_request.institution_id,
+            )
+            if sent:
+                sent_any = True
+
+    return sent_any
+
 

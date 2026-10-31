@@ -741,7 +741,7 @@ export function OfficerDashboardPage() {
                           <RequestStatusBadge status={c.status} size="sm" />
                         </td>
                         <td className="py-2.5 px-3">
-                          <PriorityBadge priority={c.priority} />
+                          <PriorityBadge priority={c.priority} reason={c.priority_reason || c.priorityReason} />
                         </td>
                         <td className="py-2.5 px-3 text-2xs text-slate-500 tabular-nums">
                           {formatDate(c.submissionDate || c.created_at)}
@@ -828,7 +828,7 @@ export function OfficerDashboardPage() {
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <PriorityBadge priority={c.priority} />
+                        <PriorityBadge priority={c.priority} reason={c.priority_reason || c.priorityReason} />
                       </td>
                       <td className="py-2.5 px-3 text-2xs text-slate-500 tabular-nums">
                         {formatDate(c.submissionDate || c.created_at)}

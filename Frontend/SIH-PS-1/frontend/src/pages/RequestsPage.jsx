@@ -529,7 +529,7 @@ export function RequestsPage() {
                         {formatCurrency(req.depositAmount || req.deposit_amount)}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <PriorityBadge priority={req.priority} />
+                        <PriorityBadge priority={req.priority} reason={req.priority_reason || req.priorityReason} />
                       </td>
                       <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap tabular-nums">
                         {formatDate(req.submissionDate || req.created_at)}

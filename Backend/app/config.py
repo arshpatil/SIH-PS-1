@@ -100,6 +100,15 @@ class Config:
         "yes",
     )
 
+    # Demo Institution Email Notification Redirection (Demo mode only)
+    DEMO_INSTITUTION_EMAIL = os.getenv("DEMO_INSTITUTION_EMAIL", "1sih.hackathon@gmail.com").strip()
+    DEMO_INSTITUTION_CODE = os.getenv("DEMO_INSTITUTION_CODE", "AICTE-1-10928371").strip()
+    DEMO_INSTITUTION_ID = (
+        int(os.getenv("DEMO_INSTITUTION_ID", "1"))
+        if os.getenv("DEMO_INSTITUTION_ID")
+        else 1
+    )
+
 
 class DevelopmentConfig(Config):
     """Development environment configuration."""
@@ -125,6 +134,10 @@ class TestingConfig(Config):
         "1",
         "yes",
     )
+    # Testing mode: disable demo redirection by default so standard mock tests are unaffected
+    DEMO_INSTITUTION_EMAIL = os.getenv("TEST_DEMO_INSTITUTION_EMAIL", None)
+    DEMO_INSTITUTION_CODE = os.getenv("TEST_DEMO_INSTITUTION_CODE", "AICTE-DEMO-INST")
+    DEMO_INSTITUTION_ID = None
     UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads"
     REQUEST_UPLOAD_FOLDER = BASE_DIR / "instance" / "test_uploads" / "requests"
     SQLALCHEMY_DATABASE_URI = os.getenv(

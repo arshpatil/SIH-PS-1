@@ -41,24 +41,86 @@ def is_valid_email(email_str: Optional[str]) -> bool:
     return bool(EMAIL_REGEX.match(email_str.strip()))
 
 
-def get_institution_emails(institution: Optional[Institution]) -> list[str]:
-    """Retrieve unique verified recipient emails for an institution."""
+def is_demo_institution(institution: Optional[Institution]) -> bool:
+    """
+    Check if the given institution entity is the designated demo institution.
+    Matches by configured code, configured ID, or standard demo markers.
+    """
+    if not institution:
+        return False
+
+    demo_code = current_app.config.get("DEMO_INSTITUTION_CODE")
+    demo_id = current_app.config.get("DEMO_INSTITUTION_ID")
+
+    if demo_code and institution.institution_code == demo_code:
+        return True
+    if demo_id is not None and institution.id == demo_id:
+        return True
+    if institution.institution_code in ("AICTE-1-10928371", "AICTE-DEMO-INST"):
+        return True
+    if institution.contact_email and institution.contact_email.strip().lower() == "principal@abcite.edu.in":
+        return True
+    return False
+
+
+def resolve_institution_recipients(
+    institution: Optional[Institution],
+    extra_emails: Optional[list[str]] = None,
+) -> list[str]:
+    """
+    Central recipient resolution layer for institution-facing statutory notifications.
+
+    1. Collects valid registered emails (primary contact, linked institutional users).
+    2. Incorporates any valid extra addresses (e.g. FDR creator).
+    3. If the institution is the configured demo institution and DEMO_INSTITUTION_EMAIL is configured,
+       redirects the recipient list to the target demo email (e.g. 1sih.hackathon@gmail.com).
+    4. For real institutions, preserves their registered addresses strictly.
+    5. Dispatches clean informational logging without exposing secrets.
+    """
     if not institution:
         return []
 
-    recipients: set[str] = set()
+    registered_recipients: set[str] = set()
 
     # Primary institutional contact email
     if is_valid_email(institution.contact_email):
-        recipients.add(institution.contact_email.strip().lower())
+        registered_recipients.add(institution.contact_email.strip().lower())
 
     # Active institutional user logins linked to this college
-    if hasattr(institution, "users"):
+    if hasattr(institution, "users") and institution.users:
         for user in institution.users:
             if getattr(user, "is_active", True) and is_valid_email(user.email):
-                recipients.add(user.email.strip().lower())
+                registered_recipients.add(user.email.strip().lower())
 
-    return sorted(list(recipients))
+    # Extra verified emails (e.g., creator)
+    if extra_emails:
+        for em in extra_emails:
+            if is_valid_email(em):
+                registered_recipients.add(em.strip().lower())
+
+    sorted_recipients = sorted(list(registered_recipients))
+
+    # Check for demo email redirection override
+    demo_target = current_app.config.get("DEMO_INSTITUTION_EMAIL")
+    if demo_target and is_valid_email(demo_target) and is_demo_institution(institution):
+        clean_override = demo_target.strip().lower()
+        logger.info(
+            "DEMO EMAIL ROUTING: Institution '%s' (Code: %s, ID: %s) is identified as demo institution. "
+            "Redirecting notification from registered recipient(s) %s to demo recipient '%s'.",
+            institution.name,
+            institution.institution_code,
+            institution.id,
+            sorted_recipients,
+            clean_override,
+        )
+        return [clean_override]
+
+    return sorted_recipients
+
+
+def get_institution_emails(institution: Optional[Institution]) -> list[str]:
+    """Retrieve verified recipient emails for an institution, applying demo routing when applicable."""
+    return resolve_institution_recipients(institution)
 
 
 def is_fdr_reminder_already_sent(fdr_id: int, reminder_interval_days: int) -> bool:
@@ -1089,7 +1151,7 @@ def resolve_fdr_recipients(fdr: FDRRecord) -> tuple[Optional[Institution], list[
     1. Primary institutional contact email.
     2. Active institutional user accounts linked to this institution.
     3. The specific user who created/submitted the FDR.
-    Never uses hardcoded test email addresses.
+    Applies central demo routing if this is the demo institution.
     """
     inst = fdr.institution
     if not inst and fdr.institution_id:
@@ -1098,23 +1160,12 @@ def resolve_fdr_recipients(fdr: FDRRecord) -> tuple[Optional[Institution], list[
     if not inst:
         return None, []
 
-    recipients_set: set[str] = set()
-
-    # 1. Primary institutional contact email
-    if is_valid_email(inst.contact_email):
-        recipients_set.add(inst.contact_email.strip().lower())
-
-    # 2. Active institutional users linked to this college
-    if hasattr(inst, "users") and inst.users:
-        for u in inst.users:
-            if getattr(u, "is_active", True) and is_valid_email(u.email):
-                recipients_set.add(u.email.strip().lower())
-
-    # 3. Creator of the FDR record if active user
+    creator_emails = []
     if fdr.creator and getattr(fdr.creator, "is_active", True) and is_valid_email(fdr.creator.email):
-        recipients_set.add(fdr.creator.email.strip().lower())
+        creator_emails.append(fdr.creator.email.strip().lower())
 
-    return inst, sorted(list(recipients_set))
+    recipients = resolve_institution_recipients(inst, extra_emails=creator_emails)
+    return inst, recipients
 
 
 def send_fdr_scrutiny_status_email(

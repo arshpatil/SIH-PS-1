@@ -146,28 +146,18 @@ export function TopNavbar({ onOpenMobileSidebar, onOpenLogout }) {
         </div>
 
         {/* Right Side: Institution Badge, Notifications, User Menu */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Bank Integration Indicator */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+          {/* Institutional / Bureau Badge - Visible on medium screens and up */}
           <div
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold bg-amber-50 text-amber-800 border border-amber-300/80 tracking-wide shadow-2xs whitespace-nowrap shrink-0"
-            title="Banking Sandbox Mode: Core banking verification runs on synthetic mock verification rules."
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-            <span className="hidden sm:inline">Bank Verification Mode</span>
-            <span className="inline sm:hidden">Sandbox</span>
-          </div>
-
-          {/* Institutional / Bureau Badge - Desktop only */}
-          <div
-            className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs max-w-[240px] xl:max-w-[320px]"
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs max-w-[220px] lg:max-w-[280px] xl:max-w-[360px] shadow-2xs"
             title={isOfficerOrAdmin ? 'AICTE Scrutiny Bureau' : `${profile.collegeName} (${profile.aictePermanentId})`}
           >
             <Building className="w-3.5 h-3.5 text-navy-700 shrink-0" />
-            <span className="font-semibold text-slate-700 truncate">
+            <span className="font-semibold text-slate-800 truncate">
               {isOfficerOrAdmin ? 'AICTE Scrutiny Bureau' : profile.collegeName}
             </span>
             <span className="text-slate-300 shrink-0">|</span>
-            <span className="text-slate-500 font-mono text-[11px] shrink-0">
+            <span className="text-slate-600 font-mono text-2xs shrink-0 font-medium">
               {isOfficerOrAdmin ? 'SCRUTINY' : profile.aictePermanentId}
             </span>
           </div>

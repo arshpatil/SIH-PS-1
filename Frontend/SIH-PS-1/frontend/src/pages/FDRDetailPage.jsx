@@ -16,6 +16,8 @@ import {
   Send,
   Check,
   Clock,
+  Image as ImageIcon,
+  ScanLine,
 } from 'lucide-react'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -1002,9 +1004,9 @@ export function FDRDetailPage() {
       />
 
       {/* 2-Column Info Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Essential FDR Metadata */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-7 xl:col-span-7 space-y-6">
           <Card>
             <CardHeader
               title="Deposit & Financial Details"
@@ -1192,107 +1194,158 @@ export function FDRDetailPage() {
         </div>
 
         {/* Right Column: Attached Documents & OCR Discrepancy Findings */}
-        <div className="space-y-6">
+        <div className="lg:col-span-5 xl:col-span-5 space-y-6">
           {/* Dev / Demo Synthetic Document Suite */}
-          {isDevDemoMode && (
-            <Card className="border-indigo-200 bg-linear-to-br from-indigo-50/50 via-white to-purple-50/30 shadow-xs">
-              <CardHeader
-                title="Synthetic FDR Document Suite"
-                subtitle="Local Dev & Demo — Safe Fictional Documents for OCR Verification"
-                action={
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white shadow-2xs">
-                    Dev / Demo Mode
-                  </span>
-                }
-              />
-              <div className="space-y-3.5 text-xs text-slate-700">
-                <p className="text-slate-600 leading-relaxed text-2xs">
-                  Generate compliant fictional FDR documents marked with mandatory testing watermarks to safely test discrepancy detection, field comparison audits, and AICTE joint-lien compliance without real bank credentials.
-                </p>
+          {isDevDemoMode && (() => {
+            const currentScenario = SYNTHETIC_SCENARIO_OPTIONS.find((s) => s.id === selectedScenario) || SYNTHETIC_SCENARIO_OPTIONS[0]
+            return (
+              <Card className="border-indigo-200/90 bg-linear-to-b from-indigo-50/60 via-white to-white shadow-card overflow-hidden">
+                {/* Custom Institutional Demo Header */}
+                <div className="p-4 sm:p-5 border-b border-indigo-100 bg-white/60">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                      <span>DEV / DEMO MODE</span>
+                    </span>
+                    <span className="text-2xs text-slate-400 font-medium font-mono">
+                      SYNTHETIC ENGINE
+                    </span>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wide">
-                    Select Test Scenario:
-                  </label>
-                  <select
-                    value={selectedScenario}
-                    onChange={(e) => setSelectedScenario(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-indigo-200 bg-white font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-400"
-                  >
-                    {SYNTHETIC_SCENARIO_OPTIONS.map((scen) => (
-                      <option key={scen.id} value={scen.id}>
-                        {scen.label}
-                      </option>
-                    ))}
-                  </select>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-2 tracking-tight">
+                    Synthetic FDR Document Suite
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    Generate compliant fictional FDR documents to audit OCR discrepancy detection and joint-lien verification.
+                  </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wide">
-                    Document Format:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDocFormat('pdf')}
-                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
-                        selectedDocFormat === 'pdf'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
+                <div className="p-4 sm:p-5 space-y-4 text-xs text-slate-700">
+                  {/* Informational Scope Note */}
+                  <div className="p-3 rounded-lg bg-indigo-50/40 border border-indigo-100/80 text-xs text-slate-600 leading-relaxed">
+                    Documents are stamped with mandatory <strong className="text-indigo-900">SYNTHETIC DEMO</strong> watermarks. Validates field extraction, amounts, maturity dates, and AICTE joint liens without real banking credentials.
+                  </div>
+
+                  {/* Scenario Selection */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Scrutiny Testing Scenario
+                    </label>
+                    <select
+                      value={selectedScenario}
+                      onChange={(e) => setSelectedScenario(e.target.value)}
+                      className="w-full min-h-[44px] px-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors"
                     >
-                      Digital PDF
-                    </button>
-                    <button
+                      {SYNTHETIC_SCENARIO_OPTIONS.map((scen) => (
+                        <option key={scen.id} value={scen.id}>
+                          {scen.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Expected Outcome Indicator */}
+                    <div className="mt-1.5 flex items-center justify-between p-2 rounded-md bg-slate-50 border border-slate-200/80 text-2xs">
+                      <span className="text-slate-500 font-medium">Expected Audit Outcome:</span>
+                      <span
+                        className={`font-bold px-2 py-0.5 rounded text-[10px] tracking-wide uppercase ${
+                          currentScenario.color === 'emerald'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : currentScenario.color === 'rose'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : currentScenario.color === 'amber'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-slate-200 text-slate-800 border border-slate-300'
+                        }`}
+                      >
+                        {currentScenario.badge}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Document Format Selection */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Document Output Format
+                    </label>
+                    <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocFormat('pdf')}
+                        className={`min-h-[64px] p-2 sm:p-2.5 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
+                          selectedDocFormat === 'pdf'
+                            ? 'bg-indigo-50/80 text-indigo-950 border-2 border-indigo-600 shadow-xs ring-1 ring-indigo-400/20'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        <FileText className={`w-4 h-4 mb-1 ${selectedDocFormat === 'pdf' ? 'text-indigo-700' : 'text-slate-500'}`} />
+                        <span className="text-xs font-bold leading-tight">Digital PDF</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">Vector Text</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocFormat('scanned_pdf')}
+                        className={`min-h-[64px] p-2 sm:p-2.5 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
+                          selectedDocFormat === 'scanned_pdf'
+                            ? 'bg-indigo-50/80 text-indigo-950 border-2 border-indigo-600 shadow-xs ring-1 ring-indigo-400/20'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        <ScanLine className={`w-4 h-4 mb-1 ${selectedDocFormat === 'scanned_pdf' ? 'text-indigo-700' : 'text-slate-500'}`} />
+                        <span className="text-xs font-bold leading-tight">Scanned PDF</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">300 DPI Scan</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocFormat('image')}
+                        className={`min-h-[64px] p-2 sm:p-2.5 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
+                          selectedDocFormat === 'image'
+                            ? 'bg-indigo-50/80 text-indigo-950 border-2 border-indigo-600 shadow-xs ring-1 ring-indigo-400/20'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        <ImageIcon className={`w-4 h-4 mb-1 ${selectedDocFormat === 'image' ? 'text-indigo-700' : 'text-slate-500'}`} />
+                        <span className="text-xs font-bold leading-tight">PNG Image</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">Raster Bitmap</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Clearly Separated and Stacked Vertically */}
+                  <div className="pt-2 space-y-2.5 border-t border-indigo-100">
+                    <Button
                       type="button"
-                      onClick={() => setSelectedDocFormat('scanned_pdf')}
-                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
-                        selectedDocFormat === 'scanned_pdf'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
+                      variant="primary"
+                      size="md"
+                      icon={ShieldCheck}
+                      loading={runningSynthetic}
+                      onClick={() => handleRunSyntheticScenario()}
+                      className="w-full min-h-[44px] bg-[#142B4A] hover:bg-[#1A3C67] text-white font-semibold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center gap-2"
                     >
-                      Scanned PDF
-                    </button>
-                    <button
+                      Run Demo OCR Scenario
+                    </Button>
+
+                    <Button
                       type="button"
-                      onClick={() => setSelectedDocFormat('image')}
-                      className={`px-2 py-1.5 rounded-lg border text-2xs font-semibold text-center transition-all ${
-                        selectedDocFormat === 'image'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
+                      variant="outline"
+                      size="md"
+                      icon={Download}
+                      loading={downloadingSynthetic}
+                      onClick={() => handleDownloadSynthetic()}
+                      className="w-full min-h-[42px] border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs sm:text-sm rounded-lg shadow-2xs flex items-center justify-center gap-2"
                     >
-                      PNG Image
-                    </button>
+                      Download Synthetic File
+                    </Button>
+
+                    <p className="text-center text-[11px] text-slate-400 italic pt-0.5">
+                      Synthetic demo document runs verification pipeline without affecting official bank records.
+                    </p>
                   </div>
                 </div>
-
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 border-t border-indigo-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={Download}
-                    loading={downloadingSynthetic}
-                    onClick={() => handleDownloadSynthetic()}
-                    className="flex-1 border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 font-semibold"
-                  >
-                    Download Synthetic File
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    icon={ShieldCheck}
-                    loading={runningSynthetic}
-                    onClick={() => handleRunSyntheticScenario()}
-                    className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold"
-                  >
-                    Run Demo OCR Scenario
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
+              </Card>
+            )
+          })()}
 
           <Card>
             <CardHeader

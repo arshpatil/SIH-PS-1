@@ -536,7 +536,7 @@ export function AdminDashboardPage() {
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <PriorityBadge priority={p.priority} />
+                        <PriorityBadge priority={p.priority} reason={p.priority_reason || p.priorityReason} />
                       </td>
                       <td className="py-2.5 px-3 text-2xs text-slate-500 tabular-nums">
                         {formatDate(p.submissionDate || p.created_at)}
@@ -846,7 +846,7 @@ export function AdminDashboardPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Priority:</span>
-                <PriorityBadge priority={selectedPetition.priority} />
+                <PriorityBadge priority={selectedPetition.priority} reason={selectedPetition.priority_reason || selectedPetition.priorityReason} />
               </div>
               {(selectedPetition.priority_reason || selectedPetition.priorityReason) && (
                 <div className="pt-1.5 text-2xs text-slate-600 border-t border-slate-200">
